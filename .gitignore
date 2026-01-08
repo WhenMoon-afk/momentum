@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+test-data/
+.DS_Store
+*.log
+.env
+.env.local
+
+# Development docs (not for distribution)
+CLAUDE.md
+PROGRESS.md
+*RESEARCH*.md
+ADVANCED_PATTERNS.md
+ARCHITECTURE_DIAGRAMS.md
+CONTEXT_INJECTION*.md
+DEVELOPMENT_PLAN.md
+IMPLEMENTATION_GUIDE.md
+tools/

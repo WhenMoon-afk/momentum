@@ -1,0 +1,59 @@
+{
+  "$schema": "https://unpkg.com/@anthropic/claude-code-plugin-schema@latest/plugin.schema.json",
+  "name": "momentum",
+  "displayName": "Momentum",
+  "version": "0.1.0",
+  "description": "Fast context compacting for Claude Code via incremental snapshots. Never wait for slow compacting again.",
+  "author": "Your Name",
+  "repository": "https://github.com/yourusername/momentum",
+  "license": "MIT",
+  "keywords": ["compacting", "context", "snapshots", "performance"],
+
+  "mcpServers": {
+    "momentum": {
+      "command": "node",
+      "args": ["${pluginDir}/dist/index.js"],
+      "env": {
+        "MOMENTUM_DB_PATH": "${dataDir}/momentum.db"
+      }
+    }
+  },
+
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "mcp",
+            "server": "momentum",
+            "tool": "get_compacted_context",
+            "arguments": {
+              "max_tokens": 15000
+            }
+          }
+        ]
+      }
+    ]
+  },
+
+  "settings": {
+    "auto_snapshot_threshold": {
+      "type": "number",
+      "default": 30000,
+      "description": "Token count threshold for suggesting a snapshot"
+    },
+    "max_snapshot_tokens": {
+      "type": "number",
+      "default": 2000,
+      "description": "Target maximum tokens per snapshot"
+    }
+  },
+
+  "permissions": {
+    "filesystem": {
+      "read": ["${dataDir}"],
+      "write": ["${dataDir}"]
+    }
+  }
+}

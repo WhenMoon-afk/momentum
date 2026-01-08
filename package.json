@@ -1,0 +1,43 @@
+{
+  "name": "momentum",
+  "version": "0.3.0",
+  "description": "Fast context recovery for Claude Code - never lose your momentum",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "momentum": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "mcp",
+    "context",
+    "recovery",
+    "snapshots",
+    "substratia"
+  ],
+  "author": "whenmoon-afk",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^11.5.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "plugin.json"
+  ]
+}
