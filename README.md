@@ -159,16 +159,29 @@ SQLite database at `~/.local/share/momentum/momentum.db`
 
 Override with `MOMENTUM_DB_PATH` environment variable.
 
+## Want Cloud Sync?
+
+**[Substratia Pro](https://substratia.io)** (coming soon) adds:
+- Cloud sync for snapshots across all your devices
+- Snapshot dashboard to browse and manage context
+- Automatic backups and disaster recovery
+- Team snapshot sharing
+
+**[Join the waitlist](https://substratia.io)** to get early access.
+
 ## Related Projects
 
-- **[memory-mcp](https://github.com/WhenMoon-afk/claude-memory-mcp)** - Persistent memory across sessions
-- **[AgentForge](https://substratia.io/builder)** - Visual agent config builder
+Part of the **Substratia** memory infrastructure ecosystem:
+
+- **[memory-mcp](https://github.com/WhenMoon-afk/claude-memory-mcp)** - Persistent memory across sessions (npm: `@whenmoon-afk/memory-mcp`)
+- **[AgentForge](https://substratia.io/builder)** - Visual drag-and-drop agent config builder
 - **[Substratia](https://substratia.io)** - Memory infrastructure for AI
 
 ## Support
 
 - [GitHub Issues](https://github.com/WhenMoon-afk/momentum/issues) - Bug reports & feature requests
 - [GitHub Sponsors](https://github.com/sponsors/WhenMoon-afk) - Support development
+- [Ko-fi](https://ko-fi.com/substratia) - One-time contributions
 
 ## License
 
