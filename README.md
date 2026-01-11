@@ -1,5 +1,7 @@
 # Momentum
 
+[![CI](https://github.com/WhenMoon-afk/momentum/actions/workflows/ci.yml/badge.svg)](https://github.com/WhenMoon-afk/momentum/actions/workflows/ci.yml)
+
 **Instant context recovery for Claude Code** - Save snapshots as you work, restore in <5ms after `/clear`.
 
 ## The Problem
