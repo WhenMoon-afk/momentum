@@ -3,6 +3,8 @@ node_modules/
 
 # Note: dist/ is NOT ignored - it's committed for immediate plugin functionality
 # Rebuild with: bun run build
+# But compiled binaries are too large for GitHub
+dist/momentum-*
 
 # SQLite database files
 *.db
