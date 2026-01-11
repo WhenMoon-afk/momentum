@@ -51,13 +51,13 @@ CLAUDE_SETTINGS_FILE="$CLAUDE_SETTINGS_DIR/settings.json"
 # Create settings directory if needed
 mkdir -p "$CLAUDE_SETTINGS_DIR"
 
-# Generate MCP server config
+# Generate MCP server config (uses wrapper for auto-install)
 MCP_CONFIG=$(cat <<EOF
 {
   "mcpServers": {
     "momentum": {
-      "command": "$RUNTIME",
-      "args": ["$PROJECT_DIR/dist/index.js"]
+      "command": "node",
+      "args": ["$PROJECT_DIR/cli/mcp-server-wrapper.js"]
     }
   }
 }
@@ -87,3 +87,7 @@ echo "3. Restore context:     restore_context()"
 echo ""
 echo "Performance: <5ms context recovery vs 30+ seconds traditional"
 echo ""
+
+# Run validation
+echo "Running validation..."
+"$SCRIPT_DIR/validate.sh" 2>/dev/null || echo "(validation skipped)"

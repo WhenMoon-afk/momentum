@@ -17,7 +17,8 @@
     "test:benchmark": "bun run vitest run tests/benchmark.test.ts",
     "test:harness": "bun run tools/test-harness.ts",
     "prepublishOnly": "bun run build",
-    "setup": "bun install && bun run build"
+    "setup": "bun install && bun run build",
+    "validate": "./scripts/validate.sh"
   },
   "keywords": [
     "claude",
