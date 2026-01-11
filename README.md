@@ -34,7 +34,7 @@ Momentum:     [/clear] → restore_context → <5ms
 ### Via Plugin Marketplace (Recommended)
 
 ```
-/plugin install momentum@whenmoon-afk
+/plugin install momentum@substratia-marketplace
 ```
 
 ### From GitHub
