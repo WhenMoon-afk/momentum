@@ -13765,7 +13765,8 @@ class MomentumDatabase {
     return this.getSnapshotById(snapshotId);
   }
   getSnapshotById(id) {
-    return this.db.query("SELECT * FROM snapshots WHERE id = ?").get(id);
+    const result = this.db.query("SELECT * FROM snapshots WHERE id = ?").get(id);
+    return result ?? undefined;
   }
   listSnapshots(sessionId, limit = 50) {
     if (sessionId) {
@@ -13907,7 +13908,7 @@ class MomentumDatabase {
       WHERE session_id = ?
       GROUP BY session_id
     `).get(sessionId);
-    return result;
+    return result ?? undefined;
   }
   deleteSnapshots(sessionId, beforeId, keepRecent = 5) {
     if (sessionId && keepRecent > 0) {

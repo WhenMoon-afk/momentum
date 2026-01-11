@@ -19,10 +19,12 @@ Measured time to retrieve compacted context at various stored token sizes:
 
 | Stored Tokens | Snapshots | Retrieve Time | Speedup vs 30s |
 |---------------|-----------|---------------|----------------|
-| 10,000        | 5         | **0.63ms**    | 47,619x        |
-| 50,000        | 25        | **1.10ms**    | 27,273x        |
-| 100,000       | 50        | **1.57ms**    | 19,108x        |
-| 150,000       | 75        | **2.86ms**    | 10,490x        |
+| 10,000        | 5         | **~1ms**      | ~26,000x       |
+| 50,000        | 25        | **~2.5ms**    | ~12,000x       |
+| 100,000       | 50        | **~4ms**      | ~7,000x        |
+| 150,000       | 75        | **~5ms**      | ~6,000x        |
+
+*Based on benchmarks from 2026-01-11. Run `bun test:benchmark` to regenerate.*
 
 ### Snapshot Save Performance
 

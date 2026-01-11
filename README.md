@@ -22,12 +22,14 @@ Momentum:     [/clear] → restore_context → <5ms
 
 ## Performance
 
-| Stored Tokens | Restore Time | vs LLM Compaction |
-|---------------|--------------|-------------------|
-| 10,000        | **0.64ms**   | 46,875x faster    |
-| 50,000        | **0.91ms**   | 32,967x faster    |
-| 100,000       | **1.37ms**   | 21,898x faster    |
-| 150,000       | **2.60ms**   | 11,538x faster    |
+| Stored Tokens | Restore Time | vs 30s LLM Compaction |
+|---------------|--------------|----------------------|
+| 10,000        | **~1ms**     | ~26,000x faster      |
+| 50,000        | **~2.5ms**   | ~12,000x faster      |
+| 100,000       | **~4ms**     | ~7,000x faster       |
+| 150,000       | **~5ms**     | ~6,000x faster       |
+
+*Run `bun test:benchmark` to see results on your hardware.*
 
 ## Installation
 
