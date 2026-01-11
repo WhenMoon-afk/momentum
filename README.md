@@ -1,8 +1,11 @@
 # Momentum
 
 [![CI](https://github.com/WhenMoon-afk/momentum/actions/workflows/ci.yml/badge.svg)](https://github.com/WhenMoon-afk/momentum/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Instant context recovery for Claude Code** - Save snapshots as you work, restore in <5ms after `/clear`.
+
+> *Part of the [Substratia](https://substratia.io) memory infrastructure ecosystem.*
 
 ## The Problem
 
@@ -155,6 +158,17 @@ Inspired by [obra's Streamlinear approach](https://blog.fsck.com/2025/12/27/stre
 SQLite database at `~/.local/share/momentum/momentum.db`
 
 Override with `MOMENTUM_DB_PATH` environment variable.
+
+## Related Projects
+
+- **[memory-mcp](https://github.com/WhenMoon-afk/claude-memory-mcp)** - Persistent memory across sessions
+- **[AgentForge](https://substratia.io/builder)** - Visual agent config builder
+- **[Substratia](https://substratia.io)** - Memory infrastructure for AI
+
+## Support
+
+- [GitHub Issues](https://github.com/WhenMoon-afk/momentum/issues) - Bug reports & feature requests
+- [GitHub Sponsors](https://github.com/sponsors/WhenMoon-afk) - Support development
 
 ## License
 
