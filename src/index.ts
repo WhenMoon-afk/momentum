@@ -80,169 +80,97 @@ class MomentumServer {
       tools: [
         {
           name: 'save_snapshot',
-          description:
-            'Save a snapshot of current work progress. Call this at natural breakpoints (task completion, before risky changes, end of session). Snapshots enable instant compacting later.',
+          description: 'Save work progress snapshot',
           inputSchema: {
             type: 'object',
             properties: {
-              summary: {
-                type: 'string',
-                description: 'Brief summary of what was accomplished (1-2 sentences)',
-              },
-              context: {
-                oneOf: [
-                  { type: 'string', description: 'Free-form context description' },
-                  {
-                    type: 'object',
-                    description: 'Structured context',
-                    properties: {
-                      description: { type: 'string' },
-                      files: { type: 'array', items: { type: 'string' } },
-                      decisions: { type: 'array', items: { type: 'string' } },
-                      blockers: { type: 'array', items: { type: 'string' } },
-                      errors_fixed: { type: 'array', items: { type: 'string' } },
-                    },
-                  },
-                ],
-              },
-              files_touched: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'List of files modified',
-              },
-              decisions: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Key decisions made',
-              },
-              next_steps: {
-                type: 'string',
-                description: 'What should happen next',
-              },
-              importance: {
-                type: 'string',
-                enum: ['critical', 'important', 'normal', 'reference'],
-                description: 'How important is this snapshot? critical=must preserve, important=high value, normal=standard, reference=background info',
-              },
+              summary: { type: 'string' },
+              context: { type: 'string' },
+              files_touched: { type: 'array', items: { type: 'string' } },
+              decisions: { type: 'array', items: { type: 'string' } },
+              next_steps: { type: 'string' },
+              importance: { type: 'string', enum: ['critical', 'important', 'normal', 'reference'] },
             },
             required: ['summary', 'context'],
           },
         },
         {
           name: 'get_compacted_context',
-          description:
-            'Get combined context from all snapshots. Use this for instant compacting instead of LLM summarization. Returns concatenated snapshots within token limit.',
+          description: 'Get combined context from snapshots',
           inputSchema: {
             type: 'object',
             properties: {
-              session_id: {
-                type: 'string',
-                description: 'Session ID (uses current session if not specified)',
-              },
-              max_tokens: {
-                type: 'number',
-                description: 'Maximum tokens to return (default: 15000)',
-              },
+              session_id: { type: 'string' },
+              max_tokens: { type: 'number' },
             },
           },
         },
         {
           name: 'list_snapshots',
-          description: 'List saved snapshots for current or specified session',
+          description: 'List saved snapshots',
           inputSchema: {
             type: 'object',
             properties: {
-              session_id: {
-                type: 'string',
-                description: 'Session ID (lists all if not specified)',
-              },
-              limit: {
-                type: 'number',
-                description: 'Maximum number of snapshots to return (default: 50)',
-              },
+              session_id: { type: 'string' },
+              limit: { type: 'number' },
             },
           },
         },
         {
           name: 'start_session',
-          description:
-            'Start a new snapshot session. Call at the beginning of a work session to group related snapshots.',
+          description: 'Start new session',
           inputSchema: {
             type: 'object',
             properties: {
-              project_path: {
-                type: 'string',
-                description: 'Path to the project being worked on',
-              },
+              project_path: { type: 'string' },
             },
           },
         },
         {
           name: 'get_session_stats',
-          description: 'Get statistics about the current or specified session',
+          description: 'Get session statistics',
           inputSchema: {
             type: 'object',
             properties: {
-              session_id: {
-                type: 'string',
-                description: 'Session ID (uses current session if not specified)',
-              },
+              session_id: { type: 'string' },
             },
           },
         },
         {
           name: 'cleanup_snapshots',
-          description:
-            'Delete old snapshots to free space. Keeps most recent snapshots by default.',
+          description: 'Delete old snapshots',
           inputSchema: {
             type: 'object',
             properties: {
-              session_id: {
-                type: 'string',
-                description: 'Session ID to clean up',
-              },
-              keep_recent: {
-                type: 'number',
-                description: 'Number of recent snapshots to keep (default: 5)',
-              },
+              session_id: { type: 'string' },
+              keep_recent: { type: 'number' },
             },
           },
         },
         {
           name: 'clear_session',
-          description: 'Delete all snapshots for a session. Use when starting fresh.',
+          description: 'Delete all session snapshots',
           inputSchema: {
             type: 'object',
             properties: {
-              session_id: {
-                type: 'string',
-                description: 'Session ID to clear (uses current if not specified)',
-              },
+              session_id: { type: 'string' },
             },
           },
         },
         {
           name: 'resume_session',
-          description:
-            'Resume a previous session for the current project. Useful after restarting Claude Code to continue where you left off.',
+          description: 'Resume previous session',
           inputSchema: {
             type: 'object',
             properties: {
-              project_path: {
-                type: 'string',
-                description: 'Path to the project to find session for',
-              },
-              session_id: {
-                type: 'string',
-                description: 'Specific session ID to resume (optional)',
-              },
+              project_path: { type: 'string' },
+              session_id: { type: 'string' },
             },
           },
         },
         {
           name: 'health_check',
-          description:
-            'Check the health of the Momentum database and service. Returns integrity status and statistics.',
+          description: 'Check database health',
           inputSchema: {
             type: 'object',
             properties: {},
@@ -250,97 +178,51 @@ class MomentumServer {
         },
         {
           name: 'inject_context',
-          description:
-            'Inject relevant context from snapshots into the conversation. Use this AFTER compacting has occurred to restore important context that was lost. Returns a curated summary of key information.',
+          description: 'Inject context from snapshots into conversation',
           inputSchema: {
             type: 'object',
             properties: {
-              topic: {
-                type: 'string',
-                description: 'Topic or keyword to search for relevant snapshots (optional)',
-              },
-              include_critical: {
-                type: 'boolean',
-                description: 'Always include critical snapshots (default: true)',
-              },
-              max_tokens: {
-                type: 'number',
-                description: 'Maximum tokens to inject (default: 5000)',
-              },
+              topic: { type: 'string' },
+              include_critical: { type: 'boolean' },
+              max_tokens: { type: 'number' },
             },
           },
         },
         {
           name: 'restore_context',
-          description:
-            'Restore snapshot context after compacting. Use this when you\'ve lost context and need to re-orient. Returns a focused, formatted context injection with summaries and key decisions. More comprehensive than inject_context.',
+          description: 'Restore saved context after /clear',
           inputSchema: {
             type: 'object',
             properties: {
-              session_id: {
-                type: 'string',
-                description: 'Session ID (uses current session if not specified)',
-              },
-              importance_level: {
-                type: 'string',
-                enum: ['critical', 'important', 'all'],
-                description: 'Filter snapshots by importance (default: important)',
-              },
-              max_snapshots: {
-                type: 'number',
-                description: 'Maximum number of snapshots to include (default: 10)',
-              },
-              include_summary: {
-                type: 'boolean',
-                description: 'Include condensed timeline summary (default: true)',
-              },
+              session_id: { type: 'string' },
+              importance_level: { type: 'string', enum: ['critical', 'important', 'all'] },
+              max_snapshots: { type: 'number' },
+              include_summary: { type: 'boolean' },
             },
           },
         },
         {
           name: 'get_context_about',
-          description:
-            'Search snapshots for context about a specific topic. Useful when you need details about a past decision or implementation. Returns matching snapshots ranked by relevance.',
+          description: 'Search snapshots by topic',
           inputSchema: {
             type: 'object',
             properties: {
-              query: {
-                type: 'string',
-                description:
-                  'What do you want context about? E.g., "user authentication", "database schema", "error handling"',
-              },
-              session_id: {
-                type: 'string',
-                description: 'Session ID (searches current session if not specified)',
-              },
-              importance_level: {
-                type: 'string',
-                enum: ['critical', 'important', 'normal', 'any'],
-                description: 'Minimum importance level (default: any)',
-              },
-              max_snapshots: {
-                type: 'number',
-                description: 'Maximum snapshots to return (default: 5)',
-              },
-              detailed: {
-                type: 'boolean',
-                description: 'Include full snapshot text (true) or just summaries (false, default)',
-              },
+              query: { type: 'string' },
+              session_id: { type: 'string' },
+              importance_level: { type: 'string', enum: ['critical', 'important', 'normal', 'any'] },
+              max_snapshots: { type: 'number' },
+              detailed: { type: 'boolean' },
             },
             required: ['query'],
           },
         },
         {
           name: 'list_sessions',
-          description:
-            'List all saved sessions with their statistics. Useful for finding sessions across projects or seeing your session history.',
+          description: 'List all sessions',
           inputSchema: {
             type: 'object',
             properties: {
-              limit: {
-                type: 'number',
-                description: 'Maximum number of sessions to return (default: 20, max: 100)',
-              },
+              limit: { type: 'number' },
             },
           },
         },

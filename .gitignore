@@ -1,22 +1,28 @@
+# Dependencies
 node_modules/
-dist/
+
+# Note: dist/ is NOT ignored - it's committed for immediate plugin functionality
+# Rebuild with: bun run build
+
+# SQLite database files
 *.db
 *.db-journal
 *.db-shm
 *.db-wal
+
+# Test artifacts
 test-data/
+benchmark-results.json
+
+# OS files
 .DS_Store
+
+# Logs
 *.log
+
+# Environment
 .env
 .env.local
 
-# Development docs (not for distribution)
-CLAUDE.md
-PROGRESS.md
-*RESEARCH*.md
-ADVANCED_PATTERNS.md
-ARCHITECTURE_DIAGRAMS.md
-CONTEXT_INJECTION*.md
-DEVELOPMENT_PLAN.md
-IMPLEMENTATION_GUIDE.md
-tools/
+# Research docs (kept in docs/research/ but not distributed)
+docs/research/

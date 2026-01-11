@@ -1,0 +1,24 @@
+{
+  "name": "momentum",
+  "version": "0.3.0",
+  "description": "Instant context recovery for Claude Code. Save snapshots as you work, restore in <5ms after /clear.",
+  "author": {
+    "name": "whenmoon-afk"
+  },
+  "homepage": "https://github.com/whenmoon-afk/momentum",
+  "repository": "https://github.com/whenmoon-afk/momentum",
+  "license": "MIT",
+  "keywords": ["context", "recovery", "snapshots", "memory", "compaction", "momentum"],
+  "skills": ["./skills/context-management"],
+  "agents": ["./agents/restore-context.md"],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": {
+    "momentum": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/cli/mcp-server-wrapper.js"],
+      "env": {
+        "MOMENTUM_DB_PATH": "${CLAUDE_DATA_DIR}/momentum.db"
+      }
+    }
+  }
+}
