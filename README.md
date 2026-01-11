@@ -119,6 +119,14 @@ get_context_about(query: "authentication")
 | `list_sessions` | View all sessions |
 | `health_check` | Database status |
 
+## Verify Installation
+
+```bash
+./scripts/validate.sh
+# or
+bun run validate
+```
+
 ## Development
 
 ```bash
@@ -126,6 +134,7 @@ bun install           # Install dependencies
 bun run build         # Compile TypeScript
 bun run test          # Run tests (67 total)
 bun run test:benchmark # Run benchmarks
+bun run validate      # Verify installation
 ```
 
 ## Context Efficiency
