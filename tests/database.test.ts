@@ -1,13 +1,14 @@
 /**
  * Unit tests for MomentumDatabase
+ * Using Bun's native test runner
  */
 
-import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
-import { MomentumDatabase } from '../src/database.js';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'bun:test';
+import { MomentumDatabase } from '../src/database';
 import { existsSync, unlinkSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 
-const TEST_DIR = join(process.cwd(), 'test-data', 'vitest');
+const TEST_DIR = join(process.cwd(), 'test-data', 'bun-tests');
 let testDbPath: string;
 let db: MomentumDatabase;
 

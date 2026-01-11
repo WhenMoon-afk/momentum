@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Momentum provides instant context recovery for Claude Code. Save snapshots as you work, restore in <5ms after `/clear`.
 
+**v0.4.0**: Now uses Bun's native SQLite (`bun:sqlite`) - no native module compilation needed!
+
 ```
 Traditional:  [context full] → LLM compaction → 30-60 seconds
 Momentum:     [/clear] → restore_context → <5ms
@@ -15,10 +17,10 @@ Momentum:     [/clear] → restore_context → <5ms
 
 ```bash
 bun install            # Install dependencies
-bun run build          # Compile TypeScript
-bun run test           # Run tests (67 total)
-bun run test:benchmark # Run benchmarks
-bun run test:harness   # Run integration tests
+bun run build          # Build with Bun bundler
+bun test               # Run tests (40 total, native bun:test)
+bun test:benchmark     # Run benchmarks
+bun test:harness       # Run integration tests
 ```
 
 ## Project Structure
@@ -62,18 +64,21 @@ momentum/
 ## Constraints
 
 - **MCP uses stdout** - All logging via `console.error`
-- **better-sqlite3** native module - May need rebuild on Node upgrade
+- **Bun runtime required** - Uses `bun:sqlite` (native, no compilation)
 - **Database**: `~/.local/share/momentum/momentum.db`
 
 ## Testing
 
 ```bash
-# Run single test file
-bun run vitest run tests/database.test.ts
+# Run all tests
+bun test
 
-# Run test by name
-bun run vitest run -t "saves a snapshot"
+# Run single test file
+bun test tests/database.test.ts
+
+# Run test by name pattern
+bun test --test-name-pattern "saves a snapshot"
 
 # Manual MCP test
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node dist/index.js
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | bun dist/index.js
 ```
