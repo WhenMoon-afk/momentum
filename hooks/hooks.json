@@ -2,12 +2,10 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume",
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Momentum context recovery ready. Use save_snapshot to save progress, restore_context after /clear.'",
-            "async": true
+            "command": "echo 'Momentum context recovery ready. Use save_snapshot to save progress, restore_context after /clear.'"
           }
         ]
       }

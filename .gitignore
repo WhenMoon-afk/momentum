@@ -26,5 +26,8 @@ benchmark-results.json
 .env
 .env.local
 
+# Claude Code local config (session-specific)
+.claude/*.local.md
+
 # Research docs (kept in docs/research/ but not distributed)
 docs/research/
