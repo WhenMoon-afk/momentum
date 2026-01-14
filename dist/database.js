@@ -1,6 +1,7 @@
 /**
  * Momentum - SQLite database layer
  * Stores incremental snapshots for fast context compacting
+ * Using better-sqlite3 for cross-platform Node.js compatibility
  */
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
@@ -24,11 +25,11 @@ export class MomentumDatabase {
      */
     configurePragmas() {
         // WAL mode for better concurrency and crash recovery
-        this.db.pragma('journal_mode = WAL');
+        this.db.exec('PRAGMA journal_mode = WAL');
         // Wait up to 5 seconds if database is locked
-        this.db.pragma('busy_timeout = 5000');
+        this.db.exec('PRAGMA busy_timeout = 5000');
         // Enable foreign keys
-        this.db.pragma('foreign_keys = ON');
+        this.db.exec('PRAGMA foreign_keys = ON');
     }
     initializeSchema() {
         this.db.exec(`
@@ -123,7 +124,7 @@ export class MomentumDatabase {
      */
     healthCheck() {
         try {
-            const integrityResult = this.db.pragma('integrity_check');
+            const integrityResult = this.db.prepare('PRAGMA integrity_check').all();
             const isOk = integrityResult[0]?.integrity_check === 'ok';
             const stats = this.db.prepare(`
         SELECT
@@ -231,17 +232,18 @@ export class MomentumDatabase {
         const insertSnapshot = this.db.transaction(() => {
             const sessionId = this.getOrCreateSession(input.session_id);
             const sequence = this.getNextSequence(sessionId);
-            const stmt = this.db.prepare(`
+            this.db.prepare(`
         INSERT INTO snapshots (
           session_id, sequence, summary, context,
           files_touched, decisions, next_steps, token_estimate, importance
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-            const result = stmt.run(sessionId, sequence, input.summary, formattedContext, input.files_touched ? JSON.stringify(input.files_touched) : null, input.decisions ? JSON.stringify(input.decisions) : null, input.next_steps || null, tokenEstimate, importance);
+      `).run(sessionId, sequence, input.summary, formattedContext, input.files_touched ? JSON.stringify(input.files_touched) : null, input.decisions ? JSON.stringify(input.decisions) : null, input.next_steps || null, tokenEstimate, importance);
+            // Get the last inserted row ID
+            const lastId = this.db.prepare('SELECT last_insert_rowid() as id').get();
             // Update session last_snapshot_at
             this.db.prepare("UPDATE sessions SET last_snapshot_at = datetime('now') WHERE session_id = ?").run(sessionId);
-            return result.lastInsertRowid;
+            return lastId.id;
         });
         const snapshotId = insertSnapshot();
         return this.getSnapshotById(snapshotId);
@@ -250,7 +252,8 @@ export class MomentumDatabase {
      * Get snapshot by ID
      */
     getSnapshotById(id) {
-        return this.db.prepare('SELECT * FROM snapshots WHERE id = ?').get(id);
+        const result = this.db.prepare('SELECT * FROM snapshots WHERE id = ?').get(id);
+        return result ?? undefined;
     }
     /**
      * List snapshots for a session
@@ -409,7 +412,7 @@ export class MomentumDatabase {
       WHERE session_id = ?
       GROUP BY session_id
     `).get(sessionId);
-        return result;
+        return result ?? undefined;
     }
     /**
      * Delete old snapshots to free space

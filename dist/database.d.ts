@@ -1,6 +1,7 @@
 /**
  * Momentum - SQLite database layer
  * Stores incremental snapshots for fast context compacting
+ * Using better-sqlite3 for cross-platform Node.js compatibility
  */
 import { Snapshot, SaveSnapshotInput, CompactResult, SessionStats } from './types.js';
 export declare class MomentumDatabase {

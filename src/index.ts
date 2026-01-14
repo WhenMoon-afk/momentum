@@ -21,7 +21,7 @@ import { join } from 'path';
 import { MomentumDatabase } from './database.js';
 import { SaveSnapshotInput } from './types.js';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 // Determine database path
 function getDefaultDbPath(): string {
@@ -127,11 +127,11 @@ class MomentumServer {
       try {
         switch (name) {
           case 'save':
-            return this.handleSave(args as SaveArgs);
+            return this.handleSave(args as unknown as SaveArgs);
           case 'restore':
-            return this.handleRestore(args as RestoreArgs);
+            return this.handleRestore(args as unknown as RestoreArgs);
           case 'momentum':
-            return this.handleMomentum(args as MomentumArgs);
+            return this.handleMomentum(args as unknown as MomentumArgs);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }

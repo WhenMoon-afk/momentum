@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
- * Momentum - Fast context compacting for Claude Code
+ * Momentum - Fast context recovery for Claude Code
  *
- * MCP server that provides incremental snapshot storage for instant compacting.
- * Instead of waiting for Claude to summarize 190k tokens, concatenate pre-computed snapshots.
+ * MCP server with 3 consolidated tools:
+ * - save: Save work progress snapshot
+ * - restore: Restore context after /clear
+ * - momentum: Meta tool for list, search, sessions, health, help
  */
 export {};
 //# sourceMappingURL=index.d.ts.map

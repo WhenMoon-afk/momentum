@@ -1,10 +1,10 @@
 /**
  * Momentum - SQLite database layer
  * Stores incremental snapshots for fast context compacting
- * Using Bun's native SQLite (bun:sqlite) for optimal performance
+ * Using better-sqlite3 for cross-platform Node.js compatibility
  */
 
-import { Database } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { randomUUID } from 'crypto';
@@ -20,7 +20,7 @@ import {
 const TOKEN_SAFETY_MARGIN = 0.85;
 
 export class MomentumDatabase {
-  private db: Database;
+  private db: InstanceType<typeof Database>;
 
   constructor(dbPath: string) {
     const dir = dirname(dbPath);
@@ -94,7 +94,7 @@ export class MomentumDatabase {
    */
   private runMigrations(): void {
     // Check current schema version
-    const currentVersion = this.db.query(
+    const currentVersion = this.db.prepare(
       'SELECT MAX(version) as ver FROM schema_version'
     ).get() as { ver: number };
 
@@ -107,7 +107,7 @@ export class MomentumDatabase {
       } catch {
         // Column might already exist, ignore
       }
-      this.db.query('INSERT INTO schema_version (version) VALUES (?)').run(2);
+      this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(2);
     }
   }
 
@@ -117,12 +117,12 @@ export class MomentumDatabase {
   getOrCreateSession(sessionId?: string, projectPath?: string): string {
     const id = sessionId || this.generateSessionId();
 
-    const existing = this.db.query(
+    const existing = this.db.prepare(
       'SELECT session_id FROM sessions WHERE session_id = ?'
     ).get(id);
 
     if (!existing) {
-      this.db.query(
+      this.db.prepare(
         'INSERT INTO sessions (session_id, project_path) VALUES (?, ?)'
       ).run(id, projectPath || null);
     }
@@ -139,7 +139,7 @@ export class MomentumDatabase {
    * Find the most recent session for a project path
    */
   findSessionByProject(projectPath: string): string | null {
-    const result = this.db.query(`
+    const result = this.db.prepare(`
       SELECT session_id FROM sessions
       WHERE project_path = ?
       ORDER BY last_snapshot_at DESC, started_at DESC
@@ -153,10 +153,10 @@ export class MomentumDatabase {
    */
   healthCheck(): { ok: boolean; details: Record<string, unknown> } {
     try {
-      const integrityResult = this.db.query('PRAGMA integrity_check').all() as Array<{ integrity_check: string }>;
+      const integrityResult = this.db.prepare('PRAGMA integrity_check').all() as Array<{ integrity_check: string }>;
       const isOk = integrityResult[0]?.integrity_check === 'ok';
 
-      const stats = this.db.query(`
+      const stats = this.db.prepare(`
         SELECT
           (SELECT COUNT(*) FROM sessions) as session_count,
           (SELECT COUNT(*) FROM snapshots) as snapshot_count,
@@ -187,7 +187,7 @@ export class MomentumDatabase {
    * Note: This is called within saveSnapshot's transaction for safety
    */
   private getNextSequence(sessionId: string): number {
-    const result = this.db.query(
+    const result = this.db.prepare(
       'SELECT COALESCE(MAX(sequence), 0) + 1 as next_seq FROM snapshots WHERE session_id = ?'
     ).get(sessionId) as { next_seq: number };
 
@@ -286,7 +286,7 @@ export class MomentumDatabase {
       const sessionId = this.getOrCreateSession(input.session_id);
       const sequence = this.getNextSequence(sessionId);
 
-      this.db.query(`
+      this.db.prepare(`
         INSERT INTO snapshots (
           session_id, sequence, summary, context,
           files_touched, decisions, next_steps, token_estimate, importance
@@ -305,10 +305,10 @@ export class MomentumDatabase {
       );
 
       // Get the last inserted row ID
-      const lastId = this.db.query('SELECT last_insert_rowid() as id').get() as { id: number };
+      const lastId = this.db.prepare('SELECT last_insert_rowid() as id').get() as { id: number };
 
       // Update session last_snapshot_at
-      this.db.query(
+      this.db.prepare(
         "UPDATE sessions SET last_snapshot_at = datetime('now') WHERE session_id = ?"
       ).run(sessionId);
 
@@ -323,7 +323,7 @@ export class MomentumDatabase {
    * Get snapshot by ID
    */
   getSnapshotById(id: number): Snapshot | undefined {
-    const result = this.db.query('SELECT * FROM snapshots WHERE id = ?').get(id) as Snapshot | null;
+    const result = this.db.prepare('SELECT * FROM snapshots WHERE id = ?').get(id) as Snapshot | null;
     return result ?? undefined;
   }
 
@@ -332,11 +332,11 @@ export class MomentumDatabase {
    */
   listSnapshots(sessionId?: string, limit: number = 50): Snapshot[] {
     if (sessionId) {
-      return this.db.query(
+      return this.db.prepare(
         'SELECT * FROM snapshots WHERE session_id = ? ORDER BY sequence DESC LIMIT ?'
       ).all(sessionId, limit) as Snapshot[];
     }
-    return this.db.query(
+    return this.db.prepare(
       'SELECT * FROM snapshots ORDER BY created_at DESC LIMIT ?'
     ).all(limit) as Snapshot[];
   }
@@ -366,7 +366,7 @@ export class MomentumDatabase {
     // Get snapshots - order by importance then recency
     // Critical/important snapshots are prioritized even if older
     const snapshots = sessionId
-      ? this.db.query(`
+      ? this.db.prepare(`
           SELECT * FROM snapshots WHERE session_id = ?
           ORDER BY
             CASE importance
@@ -378,7 +378,7 @@ export class MomentumDatabase {
             END DESC,
             sequence DESC
         `).all(sessionId) as Snapshot[]
-      : this.db.query(`
+      : this.db.prepare(`
           SELECT * FROM snapshots
           ORDER BY
             CASE importance
@@ -491,7 +491,7 @@ export class MomentumDatabase {
    * Get session statistics
    */
   getSessionStats(sessionId: string): SessionStats | undefined {
-    const result = this.db.query(`
+    const result = this.db.prepare(`
       SELECT
         session_id,
         COUNT(*) as snapshot_count,
@@ -512,7 +512,7 @@ export class MomentumDatabase {
   deleteSnapshots(sessionId?: string, beforeId?: number, keepRecent: number = 5): number {
     if (sessionId && keepRecent > 0) {
       // Keep N most recent for session, delete rest
-      const result = this.db.query(`
+      const result = this.db.prepare(`
         DELETE FROM snapshots
         WHERE session_id = ?
         AND id NOT IN (
@@ -526,7 +526,7 @@ export class MomentumDatabase {
     }
 
     if (beforeId) {
-      const result = this.db.query(
+      const result = this.db.prepare(
         'DELETE FROM snapshots WHERE id < ?'
       ).run(beforeId);
       return result.changes;
@@ -539,11 +539,11 @@ export class MomentumDatabase {
    * Clear all snapshots for a session
    */
   clearSession(sessionId: string): number {
-    const result = this.db.query(
+    const result = this.db.prepare(
       'DELETE FROM snapshots WHERE session_id = ?'
     ).run(sessionId);
 
-    this.db.query(
+    this.db.prepare(
       'DELETE FROM sessions WHERE session_id = ?'
     ).run(sessionId);
 
@@ -574,7 +574,7 @@ export class MomentumDatabase {
       const escapedTopic = this.escapeLikePattern(topic);
       const searchPattern = `%${escapedTopic}%`;
       snapshots = sessionId
-        ? this.db.query(`
+        ? this.db.prepare(`
             SELECT * FROM snapshots
             WHERE session_id = ?
               AND (summary LIKE ? ESCAPE '\\' OR context LIKE ? ESCAPE '\\' OR importance = 'critical')
@@ -582,7 +582,7 @@ export class MomentumDatabase {
               CASE importance WHEN 'critical' THEN 4 WHEN 'important' THEN 3 ELSE 2 END DESC,
               sequence DESC
           `).all(sessionId, searchPattern, searchPattern) as Snapshot[]
-        : this.db.query(`
+        : this.db.prepare(`
             SELECT * FROM snapshots
             WHERE summary LIKE ? ESCAPE '\\' OR context LIKE ? ESCAPE '\\' OR importance = 'critical'
             ORDER BY
@@ -592,14 +592,14 @@ export class MomentumDatabase {
     } else if (includeCritical) {
       // Get critical/important snapshots only
       snapshots = sessionId
-        ? this.db.query(`
+        ? this.db.prepare(`
             SELECT * FROM snapshots
             WHERE session_id = ? AND importance IN ('critical', 'important')
             ORDER BY
               CASE importance WHEN 'critical' THEN 4 ELSE 3 END DESC,
               sequence DESC
           `).all(sessionId) as Snapshot[]
-        : this.db.query(`
+        : this.db.prepare(`
             SELECT * FROM snapshots
             WHERE importance IN ('critical', 'important')
             ORDER BY
@@ -678,7 +678,7 @@ export class MomentumDatabase {
   }> {
     const safeLimit = Math.min(Math.max(1, limit), 100);
 
-    return this.db.query(`
+    return this.db.prepare(`
       SELECT
         s.session_id,
         s.project_path,

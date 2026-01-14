@@ -1,102 +1,114 @@
 #!/usr/bin/env node
 /**
  * Momentum MCP Server Wrapper
- * Auto-installs dependencies and builds before starting the server.
+ * Auto-installs dependencies before starting the server.
  * Based on obra's episodic-memory pattern.
  */
 
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = dirname(__dirname);
-const nodeModulesPath = join(projectRoot, 'node_modules');
-const distPath = join(projectRoot, 'dist', 'index.js');
+const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || dirname(__dirname);
 
 // Log to stderr (MCP uses stdout for JSON-RPC)
 function log(msg) {
   console.error(`[momentum] ${msg}`);
 }
 
-function hasCommand(cmd) {
-  try {
-    execSync(`which ${cmd}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+/**
+ * Run npm install to install dependencies
+ */
+function runNpmInstall() {
+  return new Promise((resolve, reject) => {
+    const isWindows = process.platform === 'win32';
+    const npmCommand = isWindows ? 'npm.cmd' : 'npm';
+
+    log('Installing dependencies (first run only)...');
+    log('This may take 30-60 seconds...');
+
+    const child = spawn(npmCommand, ['install', '--prefer-offline', '--no-audit', '--no-fund'], {
+      cwd: PLUGIN_ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWindows
+    });
+
+    child.stdout.on('data', (data) => {
+      process.stderr.write(data);
+    });
+
+    child.stderr.on('data', (data) => {
+      process.stderr.write(data);
+    });
+
+    child.on('exit', (code) => {
+      if (code === 0) {
+        log('Dependencies installed successfully.');
+        resolve();
+      } else {
+        log('ERROR: Failed to install dependencies.');
+        log(`Please run manually: cd "${PLUGIN_ROOT}" && npm install`);
+        reject(new Error(`npm install failed with exit code ${code}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      log(`ERROR: Failed to run npm install: ${err.message}`);
+      reject(err);
+    });
+  });
 }
 
-async function ensureDependencies() {
-  if (existsSync(nodeModulesPath)) {
-    return; // Already installed
-  }
-
-  log('Installing dependencies...');
+async function main() {
   try {
-    if (hasCommand('bun')) {
-      execSync('bun install', { cwd: projectRoot, stdio: 'pipe' });
-    } else if (hasCommand('npm')) {
-      execSync('npm install', { cwd: projectRoot, stdio: 'pipe' });
-    } else {
-      throw new Error('Neither bun nor npm found. Please install Node.js or Bun.');
+    const nodeModulesPath = join(PLUGIN_ROOT, 'node_modules');
+    const betterSqlitePath = join(nodeModulesPath, 'better-sqlite3');
+
+    // Install if node_modules is missing OR if better-sqlite3 isn't installed
+    if (!existsSync(nodeModulesPath) || !existsSync(betterSqlitePath)) {
+      await runNpmInstall();
     }
-    log('Dependencies installed.');
-  } catch (err) {
-    log(`Failed to install dependencies: ${err.message}`);
-    process.exit(1);
-  }
-}
 
-async function ensureBuild() {
-  if (existsSync(distPath)) {
-    return; // Already built
-  }
+    // Start the MCP server
+    const mcpServerPath = join(PLUGIN_ROOT, 'dist', 'index.js');
 
-  log('Building TypeScript...');
-  try {
-    if (hasCommand('bun')) {
-      execSync('bun run build', { cwd: projectRoot, stdio: 'pipe' });
-    } else {
-      execSync('npm run build', { cwd: projectRoot, stdio: 'pipe' });
+    if (!existsSync(mcpServerPath)) {
+      log(`ERROR: MCP server not found at ${mcpServerPath}`);
+      log('Please run: npm run build');
+      process.exit(1);
     }
-    log('Build complete.');
-  } catch (err) {
-    log(`Failed to build: ${err.message}`);
+
+    const child = spawn(process.execPath, [mcpServerPath], {
+      stdio: 'inherit',
+      shell: false
+    });
+
+    // Forward signals to the child process
+    process.on('SIGTERM', () => child.kill('SIGTERM'));
+    process.on('SIGINT', () => child.kill('SIGINT'));
+
+    child.on('exit', (code, signal) => {
+      if (signal) {
+        process.kill(process.pid, signal);
+      } else {
+        process.exit(code || 0);
+      }
+    });
+
+    child.on('error', (err) => {
+      log(`ERROR: Failed to start MCP server: ${err.message}`);
+      process.exit(1);
+    });
+
+  } catch (error) {
+    log(`ERROR: ${error.message}`);
     process.exit(1);
   }
 }
 
-async function startServer() {
-  try {
-    await ensureDependencies();
-    await ensureBuild();
-  } catch (err) {
-    log(`Setup failed: ${err.message}`);
-    process.exit(1);
-  }
-
-  // Start the actual MCP server
-  const server = spawn('node', [distPath], {
-    stdio: 'inherit',
-    cwd: projectRoot,
-    env: { ...process.env },
-  });
-
-  server.on('error', (err) => {
-    log(`Server error: ${err.message}`);
-    process.exit(1);
-  });
-
-  server.on('exit', (code) => {
-    process.exit(code || 0);
-  });
-
-  // Handle termination signals
-  process.on('SIGTERM', () => server.kill('SIGTERM'));
-  process.on('SIGINT', () => server.kill('SIGINT'));
-}
-
-startServer();
+main().catch((error) => {
+  log(`Unexpected error: ${error.message}`);
+  process.exit(1);
+});

@@ -2,6 +2,33 @@
 
 All notable changes to Momentum will be documented in this file.
 
+## [0.6.0] - 2026-01-14
+
+### Changed
+- **BREAKING: Node.js Runtime** - Switched from Bun to Node.js for wider compatibility
+  - No longer requires Bun pre-installed
+  - Uses `better-sqlite3` instead of `bun:sqlite`
+  - Auto-install wrapper handles first-run dependency installation (30-60s once)
+- **Namespaced Commands** - Commands now use `momentum:` prefix to avoid conflicts
+  - `/momentum:save` - Save current context snapshot
+  - `/momentum:load` - Load context (default: most recent snapshot)
+  - `/momentum:status` - Show session status and recent snapshots
+
+### Removed
+- **restore-context agent** - Redundant with MCP `restore` tool
+- **Bun runtime requirement** - Now works with Node.js 18+
+
+### Fixed
+- Command name conflicts with native Claude Code commands (`/restore` vs `/resume`)
+- Base-level command pollution (was `/save`, now `/momentum:save`)
+- First-time user experience - no pre-installed runtime required
+
+### Technical
+- Runtime: `node` (was `bun`)
+- SQLite: `better-sqlite3` (was `bun:sqlite`)
+- Entry point: `cli/mcp-server-wrapper.js` with auto-install
+- Requires: Node.js v18.0.0+
+
 ## [0.5.0] - 2026-01-14
 
 ### Changed
