@@ -14049,6 +14049,7 @@ class MomentumDatabase {
 }
 
 // src/index.ts
+var VERSION = "0.5.0";
 function getDefaultDbPath() {
   const base = process.env.MOMENTUM_DB_PATH;
   if (base)
@@ -14070,14 +14071,7 @@ class MomentumServer {
   constructor() {
     const dbPath = getDefaultDbPath();
     this.db = new MomentumDatabase(dbPath);
-    this.server = new Server({
-      name: "momentum",
-      version: "0.1.0"
-    }, {
-      capabilities: {
-        tools: {}
-      }
-    });
+    this.server = new Server({ name: "momentum", version: VERSION }, { capabilities: { tools: {} } });
     this.setupHandlers();
     process.on("SIGINT", () => this.cleanup());
     process.on("SIGTERM", () => this.cleanup());
@@ -14090,13 +14084,13 @@ class MomentumServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
-          name: "save_snapshot",
+          name: "save",
           description: "Save work progress snapshot",
           inputSchema: {
             type: "object",
             properties: {
-              summary: { type: "string" },
-              context: { type: "string" },
+              summary: { type: "string", description: "Brief summary of work done" },
+              context: { type: "string", description: "Detailed context to preserve" },
               files_touched: { type: "array", items: { type: "string" } },
               decisions: { type: "array", items: { type: "string" } },
               next_steps: { type: "string" },
@@ -14106,135 +14100,37 @@ class MomentumServer {
           }
         },
         {
-          name: "get_compacted_context",
-          description: "Get combined context from snapshots",
+          name: "restore",
+          description: "Restore context after /clear. Auto-starts session based on cwd if none exists.",
           inputSchema: {
             type: "object",
             properties: {
-              session_id: { type: "string" },
-              max_tokens: { type: "number" }
+              importance_level: { type: "string", enum: ["critical", "important", "all"], default: "important" },
+              max_snapshots: { type: "number", default: 10 },
+              include_summary: { type: "boolean", default: true },
+              project_path: { type: "string", description: "Project path to find/create session" }
             }
           }
         },
         {
-          name: "list_snapshots",
-          description: "List saved snapshots",
+          name: "momentum",
+          description: "Meta tool: list snapshots, search, manage sessions, health check, help",
           inputSchema: {
             type: "object",
             properties: {
-              session_id: { type: "string" },
-              limit: { type: "number" }
-            }
-          }
-        },
-        {
-          name: "start_session",
-          description: "Start new session",
-          inputSchema: {
-            type: "object",
-            properties: {
-              project_path: { type: "string" }
-            }
-          }
-        },
-        {
-          name: "get_session_stats",
-          description: "Get session statistics",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string" }
-            }
-          }
-        },
-        {
-          name: "cleanup_snapshots",
-          description: "Delete old snapshots",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string" },
-              keep_recent: { type: "number" }
-            }
-          }
-        },
-        {
-          name: "clear_session",
-          description: "Delete all session snapshots",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string" }
-            }
-          }
-        },
-        {
-          name: "resume_session",
-          description: "Resume previous session",
-          inputSchema: {
-            type: "object",
-            properties: {
-              project_path: { type: "string" },
-              session_id: { type: "string" }
-            }
-          }
-        },
-        {
-          name: "health_check",
-          description: "Check database health",
-          inputSchema: {
-            type: "object",
-            properties: {}
-          }
-        },
-        {
-          name: "inject_context",
-          description: "Inject context from snapshots into conversation",
-          inputSchema: {
-            type: "object",
-            properties: {
-              topic: { type: "string" },
-              include_critical: { type: "boolean" },
-              max_tokens: { type: "number" }
-            }
-          }
-        },
-        {
-          name: "restore_context",
-          description: "Restore saved context after /clear",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string" },
-              importance_level: { type: "string", enum: ["critical", "important", "all"] },
-              max_snapshots: { type: "number" },
-              include_summary: { type: "boolean" }
-            }
-          }
-        },
-        {
-          name: "get_context_about",
-          description: "Search snapshots by topic",
-          inputSchema: {
-            type: "object",
-            properties: {
-              query: { type: "string" },
-              session_id: { type: "string" },
-              importance_level: { type: "string", enum: ["critical", "important", "normal", "any"] },
-              max_snapshots: { type: "number" },
-              detailed: { type: "boolean" }
+              action: {
+                type: "string",
+                enum: ["list", "search", "sessions", "health", "help"],
+                description: "list=snapshots, search=by query, sessions=list/start/resume, health=db check, help=usage"
+              },
+              query: { type: "string", description: "For search action: search query" },
+              session_id: { type: "string", description: "Target session ID" },
+              project_path: { type: "string", description: "For sessions action: project path" },
+              limit: { type: "number", description: "For list/sessions: max results" },
+              detailed: { type: "boolean", description: "For search: include full content" },
+              session_action: { type: "string", enum: ["list", "start", "resume"], description: "For sessions: sub-action" }
             },
-            required: ["query"]
-          }
-        },
-        {
-          name: "list_sessions",
-          description: "List all sessions",
-          inputSchema: {
-            type: "object",
-            properties: {
-              limit: { type: "number" }
-            }
+            required: ["action"]
           }
         }
       ]
@@ -14243,49 +14139,29 @@ class MomentumServer {
       const { name, arguments: args } = request.params;
       try {
         switch (name) {
-          case "save_snapshot":
-            return this.handleSaveSnapshot(args);
-          case "get_compacted_context":
-            return this.handleGetCompactedContext(args);
-          case "list_snapshots":
-            return this.handleListSnapshots(args);
-          case "start_session":
-            return this.handleStartSession(args);
-          case "get_session_stats":
-            return this.handleGetSessionStats(args);
-          case "cleanup_snapshots":
-            return this.handleCleanupSnapshots(args);
-          case "clear_session":
-            return this.handleClearSession(args);
-          case "resume_session":
-            return this.handleResumeSession(args);
-          case "health_check":
-            return this.handleHealthCheck();
-          case "inject_context":
-            return this.handleInjectContext(args);
-          case "restore_context":
-            return this.handleRestoreContext(args);
-          case "get_context_about":
-            return this.handleGetContextAbout(args);
-          case "list_sessions":
-            return this.handleListSessions(args);
+          case "save":
+            return this.handleSave(args);
+          case "restore":
+            return this.handleRestore(args);
+          case "momentum":
+            return this.handleMomentum(args);
           default:
-            throw new Error(`Unknown tool: ${name}`);
+            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
       } catch (error2) {
+        if (error2 instanceof McpError)
+          throw error2;
         const message = error2 instanceof Error ? error2.message : String(error2);
-        return {
-          content: [{ type: "text", text: `Error: ${message}` }]
-        };
+        return { content: [{ type: "text", text: `Error: ${message}` }] };
       }
     });
   }
-  async handleSaveSnapshot(args) {
+  async handleSave(args) {
     if (!args.summary || args.summary.trim() === "") {
-      throw new Error("summary is required and cannot be empty");
+      throw new Error("summary is required");
     }
-    if (args.context === undefined || args.context === null || typeof args.context === "string" && args.context.trim() === "") {
-      throw new Error("context is required and cannot be empty");
+    if (!args.context || args.context.trim() === "") {
+      throw new Error("context is required");
     }
     const input = {
       session_id: this.currentSessionId || undefined,
@@ -14299,264 +14175,45 @@ class MomentumServer {
     const snapshot = this.db.saveSnapshot(input);
     this.currentSessionId = snapshot.session_id;
     return {
-      content: [
-        {
-          type: "text",
-          text: `Snapshot #${snapshot.id} saved (${snapshot.token_estimate} tokens est.)
-Session: ${snapshot.session_id}
-Sequence: ${snapshot.sequence}`
-        }
-      ]
+      content: [{
+        type: "text",
+        text: `Snapshot #${snapshot.id} saved (${snapshot.token_estimate} tokens)
+Session: ${snapshot.session_id}`
+      }]
     };
   }
-  async handleGetCompactedContext(args) {
-    const sessionId = args.session_id || this.currentSessionId || undefined;
-    const maxTokens = args.max_tokens || 15000;
-    const result = this.db.getCompactedContext(sessionId, maxTokens);
-    if (result.snapshots_used === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "No snapshots found. Save snapshots during your work session to enable fast compacting."
-          }
-        ]
-      };
-    }
-    return {
-      content: [
-        {
-          type: "text",
-          text: `# Session Context (${result.snapshots_used} snapshots, ~${result.total_tokens} tokens)
-
-${result.combined_context}`
-        }
-      ]
-    };
-  }
-  async handleListSnapshots(args) {
-    const snapshots = this.db.listSnapshots(args.session_id, args.limit);
-    if (snapshots.length === 0) {
-      return {
-        content: [{ type: "text", text: "No snapshots found." }]
-      };
-    }
-    const lines = snapshots.map((s) => `#${s.id} [${s.created_at}] (${s.token_estimate} tokens)
-  ${s.summary}`);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Found ${snapshots.length} snapshots:
-
-${lines.join(`
-
-`)}`
-        }
-      ]
-    };
-  }
-  async handleStartSession(args) {
-    this.currentSessionId = this.db.getOrCreateSession(undefined, args.project_path);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Started session: ${this.currentSessionId}${args.project_path ? `
-Project: ${args.project_path}` : ""}`
-        }
-      ]
-    };
-  }
-  async handleGetSessionStats(args) {
-    const sessionId = args.session_id || this.currentSessionId;
-    if (!sessionId) {
-      return {
-        content: [{ type: "text", text: "No active session. Start a session or specify session_id." }]
-      };
-    }
-    const stats = this.db.getSessionStats(sessionId);
-    if (!stats) {
-      return {
-        content: [{ type: "text", text: `No snapshots found for session: ${sessionId}` }]
-      };
-    }
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Session: ${stats.session_id}
-Snapshots: ${stats.snapshot_count}
-Total tokens: ~${stats.total_tokens}
-First: ${stats.first_snapshot}
-Last: ${stats.last_snapshot}`
-        }
-      ]
-    };
-  }
-  async handleCleanupSnapshots(args) {
-    const deleted = this.db.deleteSnapshots(args.session_id || this.currentSessionId || undefined, args.before_id, args.keep_recent ?? 5);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Deleted ${deleted} old snapshots.`
-        }
-      ]
-    };
-  }
-  async handleClearSession(args) {
-    const sessionId = args.session_id || this.currentSessionId;
-    if (!sessionId) {
-      return {
-        content: [{ type: "text", text: "No active session to clear." }]
-      };
-    }
-    const deleted = this.db.clearSession(sessionId);
-    if (sessionId === this.currentSessionId) {
-      this.currentSessionId = null;
-    }
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Cleared session ${sessionId} (${deleted} snapshots deleted).`
-        }
-      ]
-    };
-  }
-  async handleResumeSession(args) {
-    if (args.session_id) {
-      this.currentSessionId = args.session_id;
-      const stats = this.db.getSessionStats(args.session_id);
-      if (stats) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Resumed session: ${args.session_id}
-Snapshots: ${stats.snapshot_count}
-Last activity: ${stats.last_snapshot}`
-            }
-          ]
-        };
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Resumed session: ${args.session_id} (no existing snapshots)`
-          }
-        ]
-      };
-    }
-    if (args.project_path) {
-      const existingSessionId = this.db.findSessionByProject(args.project_path);
-      if (existingSessionId) {
-        this.currentSessionId = existingSessionId;
-        const stats = this.db.getSessionStats(existingSessionId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Resumed session for ${args.project_path}
-Session: ${existingSessionId}
-Snapshots: ${stats?.snapshot_count || 0}
-Last activity: ${stats?.last_snapshot || "never"}`
-            }
-          ]
-        };
-      }
-      this.currentSessionId = this.db.getOrCreateSession(undefined, args.project_path);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `No existing session found for ${args.project_path}. Created new session: ${this.currentSessionId}`
-          }
-        ]
-      };
-    }
-    return {
-      content: [
-        {
-          type: "text",
-          text: "Please provide project_path or session_id to resume a session."
-        }
-      ]
-    };
-  }
-  async handleHealthCheck() {
-    const health = this.db.healthCheck();
-    const status = health.ok ? "\u2713 Healthy" : "\u2717 Issues detected";
-    const details = Object.entries(health.details).map(([k, v]) => `  ${k}: ${v}`).join(`
-`);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Momentum Health Check
-${status}
-
-${details}`
-        }
-      ]
-    };
-  }
-  async handleInjectContext(args) {
-    const sessionId = this.currentSessionId || undefined;
-    const maxTokens = args.max_tokens || 5000;
-    const includeCritical = args.include_critical !== false;
-    const result = this.db.getContextForInjection(sessionId, {
-      topic: args.topic,
-      includeCritical,
-      maxTokens
-    });
-    if (result.snapshots_used === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "No relevant context found to inject. Save snapshots during your work to enable context recovery."
-          }
-        ]
-      };
-    }
-    const header = args.topic ? `## \uD83D\uDCE5 Context Injection: "${args.topic}"` : "## \uD83D\uDCE5 Context Injection";
-    return {
-      content: [
-        {
-          type: "text",
-          text: `${header}
-_Recovered ${result.snapshots_used} snapshots (~${result.total_tokens} tokens)_
-
-${result.combined_context}
-
----
-_Use this context to continue your work. Key decisions and progress have been restored._`
-        }
-      ]
-    };
-  }
-  async handleRestoreContext(args) {
-    const sessionId = args.session_id || this.currentSessionId;
+  async handleRestore(args) {
     const importanceLevel = args.importance_level || "important";
     const maxSnapshots = args.max_snapshots || 10;
     const includeSummary = args.include_summary !== false;
-    if (!sessionId) {
-      return {
-        content: [{
-          type: "text",
-          text: "No active session. Start a session with start_session or specify session_id to restore context."
-        }]
-      };
+    if (args.project_path && !this.currentSessionId) {
+      const existingSessionId = this.db.findSessionByProject(args.project_path);
+      if (existingSessionId) {
+        this.currentSessionId = existingSessionId;
+      } else {
+        this.currentSessionId = this.db.getOrCreateSession(undefined, args.project_path);
+      }
     }
-    const snapshots = this.db.listSnapshots(sessionId, 100);
+    const sessionId = this.currentSessionId;
+    if (!sessionId) {
+      const sessions = this.db.listSessions(1);
+      if (sessions.length > 0) {
+        this.currentSessionId = sessions[0].session_id;
+      } else {
+        return {
+          content: [{
+            type: "text",
+            text: "No session found. Use save to create snapshots first, or provide project_path."
+          }]
+        };
+      }
+    }
+    const snapshots = this.db.listSnapshots(this.currentSessionId, 100);
     if (snapshots.length === 0) {
       return {
         content: [{
           type: "text",
-          text: "No snapshots found to restore. Save snapshots during your work to enable context recovery."
+          text: "No snapshots found. Save snapshots during work to enable context recovery."
         }]
       };
     }
@@ -14567,260 +14224,247 @@ _Use this context to continue your work. Key decisions and progress have been re
       return {
         content: [{
           type: "text",
-          text: `No ${importanceLevel} snapshots found. Try importance_level: "all" to see all snapshots.`
+          text: `No ${importanceLevel} snapshots found. Try importance_level: "all".`
         }]
       };
     }
     const parts = [];
-    parts.push("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
-    parts.push("\uD83D\uDCE5 MOMENTUM CONTEXT RESTORATION");
-    parts.push(`Generated: ${new Date().toISOString()}`);
-    parts.push(`Session: ${sessionId}`);
-    parts.push(`Snapshots: ${filtered.length} (filtered by ${importanceLevel})`);
-    parts.push("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+    parts.push("# MOMENTUM CONTEXT RESTORATION");
+    parts.push(`Session: ${this.currentSessionId}`);
+    parts.push(`Snapshots: ${filtered.length} (${importanceLevel})`);
     parts.push("");
     if (includeSummary && filtered.length > 0) {
-      parts.push("## \uD83D\uDCCB Quick Summary");
-      parts.push("");
-      parts.push(`**Most Recent:** ${filtered[0].summary}`);
+      parts.push(`## Recent: ${filtered[0].summary}`);
       parts.push(`_${this.getTimeAgo(filtered[0].created_at)}_`);
-      parts.push("");
-      const allDecisions = new Set;
-      for (const snap of filtered) {
-        if (snap.decisions) {
-          try {
-            const decisions = JSON.parse(snap.decisions);
-            if (Array.isArray(decisions)) {
-              decisions.forEach((d) => allDecisions.add(d));
-            }
-          } catch {}
-        }
-      }
-      if (allDecisions.size > 0) {
-        parts.push("**Key Decisions Made:**");
-        Array.from(allDecisions).slice(0, 5).forEach((d) => {
-          parts.push(`  \u2022 ${d}`);
-        });
-        parts.push("");
-      }
       if (filtered[0].next_steps) {
-        parts.push(`**Planned Next:** ${filtered[0].next_steps}`);
-        parts.push("");
+        parts.push(`**Next:** ${filtered[0].next_steps}`);
       }
+      parts.push("");
     }
-    parts.push("## \uD83D\uDCDA Restored Snapshots");
-    parts.push("");
+    parts.push("## Snapshots");
     for (let i = 0;i < filtered.length; i++) {
       const snap = filtered[i];
       const icon = this.getImportanceIcon(snap.importance);
       const marker = i === 0 ? " [LATEST]" : "";
       parts.push(`### ${icon} ${snap.summary}${marker}`);
       parts.push(`_${this.getTimeAgo(snap.created_at)}_`);
-      parts.push("");
       parts.push(snap.context);
-      if (snap.next_steps) {
-        parts.push("");
+      if (snap.next_steps)
         parts.push(`**Next:** ${snap.next_steps}`);
-      }
-      parts.push("");
       parts.push("---");
-      parts.push("");
     }
-    parts.push("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
-    parts.push("END: MOMENTUM CONTEXT RESTORATION");
-    parts.push("Your context has been restored. Resume work as planned.");
-    parts.push("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+    return { content: [{ type: "text", text: parts.join(`
+`) }] };
+  }
+  async handleMomentum(args) {
+    switch (args.action) {
+      case "list":
+        return this.actionList(args);
+      case "search":
+        return this.actionSearch(args);
+      case "sessions":
+        return this.actionSessions(args);
+      case "health":
+        return this.actionHealth();
+      case "help":
+        return this.actionHelp();
+      default:
+        throw new Error(`Unknown action: ${args.action}. Use: list, search, sessions, health, help`);
+    }
+  }
+  async actionList(args) {
+    const snapshots = this.db.listSnapshots(args.session_id || this.currentSessionId || undefined, args.limit || 20);
+    if (snapshots.length === 0) {
+      return { content: [{ type: "text", text: "No snapshots found." }] };
+    }
+    const lines = snapshots.map((s) => `#${s.id} [${this.getTimeAgo(s.created_at)}] ${this.getImportanceIcon(s.importance)} ${s.summary} (${s.token_estimate} tokens)`);
     return {
       content: [{
         type: "text",
-        text: parts.join(`
-`)
+        text: `Found ${snapshots.length} snapshots:
+
+${lines.join(`
+`)}`
       }]
     };
   }
-  async handleGetContextAbout(args) {
+  async actionSearch(args) {
+    if (!args.query) {
+      return { content: [{ type: "text", text: "query parameter required for search" }] };
+    }
     const query = args.query.toLowerCase().trim();
     const sessionId = args.session_id || this.currentSessionId || undefined;
-    const importanceLevel = args.importance_level || "any";
-    const maxSnapshots = args.max_snapshots || 5;
+    const maxSnapshots = args.limit || 5;
     const detailed = args.detailed === true;
-    if (!query) {
-      return {
-        content: [{
-          type: "text",
-          text: 'Please provide a query to search for. Example: "database", "authentication", "error handling"'
-        }]
-      };
-    }
     const snapshots = this.db.listSnapshots(sessionId, 100);
     if (snapshots.length === 0) {
-      return {
-        content: [{
-          type: "text",
-          text: "No snapshots found to search. Save snapshots during your work to build searchable context."
-        }]
-      };
+      return { content: [{ type: "text", text: "No snapshots to search." }] };
     }
     const scored = snapshots.map((snap) => {
       let score = 0;
       const queryTerms = query.split(/\s+/);
-      const summaryLower = snap.summary.toLowerCase();
       for (const term of queryTerms) {
-        if (summaryLower.includes(term))
+        if (snap.summary.toLowerCase().includes(term))
           score += 3;
-      }
-      const contextLower = snap.context.toLowerCase();
-      for (const term of queryTerms) {
-        if (contextLower.includes(term))
+        if (snap.context.toLowerCase().includes(term))
           score += 2;
       }
-      if (snap.decisions) {
-        try {
-          const decisions = JSON.parse(snap.decisions);
-          if (Array.isArray(decisions)) {
-            const decisionsText = decisions.join(" ").toLowerCase();
-            for (const term of queryTerms) {
-              if (decisionsText.includes(term))
-                score += 2;
-            }
-          }
-        } catch {}
-      }
-      if (snap.next_steps) {
-        const nextLower = snap.next_steps.toLowerCase();
-        for (const term of queryTerms) {
-          if (nextLower.includes(term))
-            score += 1;
-        }
-      }
-      if (snap.files_touched) {
-        try {
-          const files = JSON.parse(snap.files_touched);
-          if (Array.isArray(files)) {
-            const filesText = files.join(" ").toLowerCase();
-            for (const term of queryTerms) {
-              if (filesText.includes(term))
-                score += 1;
-            }
-          }
-        } catch {}
-      }
-      const importanceBoost = {
-        critical: 2,
-        important: 1.5,
-        normal: 1,
-        reference: 0.5
-      };
+      const importanceBoost = { critical: 2, important: 1.5, normal: 1, reference: 0.5 };
       score *= importanceBoost[snap.importance] || 1;
-      const ageHours = (Date.now() - new Date(snap.created_at + "Z").getTime()) / (1000 * 60 * 60);
-      const recencyBoost = Math.max(0.5, 2 - ageHours / 24);
-      score *= recencyBoost;
       return { snap, score };
-    }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score);
-    const importanceOrder = { critical: 4, important: 3, normal: 2, reference: 1 };
-    const minImportance = importanceLevel === "any" ? 0 : importanceOrder[importanceLevel] || 0;
-    const filtered = scored.filter(({ snap }) => (importanceOrder[snap.importance] || 2) >= minImportance).slice(0, maxSnapshots);
-    if (filtered.length === 0) {
-      return {
-        content: [{
-          type: "text",
-          text: `No snapshots found matching "${args.query}". Try a different query or use list_snapshots to see what's available.`
-        }]
-      };
+    }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score).slice(0, maxSnapshots);
+    if (scored.length === 0) {
+      return { content: [{ type: "text", text: `No snapshots match "${args.query}".` }] };
     }
-    const maxScore = filtered[0]?.score || 1;
-    const parts = [];
-    parts.push(`# \uD83D\uDD0D Context About: "${args.query}"`);
-    parts.push(`Found ${filtered.length} matching snapshot(s)`);
-    parts.push("");
-    for (const { snap, score } of filtered) {
+    const maxScore = scored[0]?.score || 1;
+    const parts = [`# Search: "${args.query}"`, `Found ${scored.length} match(es)`, ""];
+    for (const { snap, score } of scored) {
       const relevance = Math.round(score / maxScore * 100);
       const icon = this.getImportanceIcon(snap.importance);
       if (detailed) {
-        parts.push(`## ${icon} Snapshot #${snap.id} [${this.getTimeAgo(snap.created_at)}]`);
-        parts.push(`**Relevance:** ${relevance}%`);
-        parts.push("");
+        parts.push(`## ${icon} #${snap.id} [${this.getTimeAgo(snap.created_at)}]`);
+        parts.push(`Relevance: ${relevance}%`);
         parts.push(`**Summary:** ${snap.summary}`);
-        parts.push("");
         parts.push(snap.context);
-        if (snap.decisions) {
-          try {
-            const decisions = JSON.parse(snap.decisions);
-            if (Array.isArray(decisions) && decisions.length > 0) {
-              parts.push("");
-              parts.push("**Decisions:**");
-              decisions.forEach((d) => parts.push(`  \u2022 ${d}`));
-            }
-          } catch {}
-        }
-        if (snap.next_steps) {
-          parts.push("");
+        if (snap.next_steps)
           parts.push(`**Next:** ${snap.next_steps}`);
-        }
-        parts.push("");
         parts.push("---");
-        parts.push("");
       } else {
-        parts.push(`${icon} **#${snap.id}** [${this.getTimeAgo(snap.created_at)}] - ${snap.summary}`);
-        parts.push(`   Relevance: ${relevance}%`);
-        parts.push("");
+        parts.push(`${icon} #${snap.id} [${this.getTimeAgo(snap.created_at)}] - ${snap.summary} (${relevance}%)`);
       }
     }
-    if (!detailed) {
-      parts.push("_Use detailed: true for full snapshot content_");
-    }
-    return {
-      content: [{
-        type: "text",
-        text: parts.join(`
-`)
-      }]
-    };
+    if (!detailed)
+      parts.push(`
+_Use detailed: true for full content_`);
+    return { content: [{ type: "text", text: parts.join(`
+`) }] };
   }
-  async handleListSessions(args) {
-    const limit = args.limit || 20;
-    const sessions = this.db.listSessions(limit);
-    if (sessions.length === 0) {
+  async actionSessions(args) {
+    const subAction = args.session_action || "list";
+    if (subAction === "start") {
+      this.currentSessionId = this.db.getOrCreateSession(undefined, args.project_path);
       return {
         content: [{
           type: "text",
-          text: "No sessions found. Use start_session or save a snapshot to create your first session."
+          text: `Started session: ${this.currentSessionId}${args.project_path ? `
+Project: ${args.project_path}` : ""}`
         }]
       };
     }
-    const parts = [];
-    parts.push("# \uD83D\uDCC2 Sessions");
-    parts.push(`Found ${sessions.length} session(s)`);
-    parts.push("");
-    for (const session of sessions) {
-      const projectDisplay = session.project_path ? session.project_path.replace(/^\/home\/[^/]+\//, "~/") : "No project path";
-      const lastActivity = session.last_snapshot_at ? this.getTimeAgo(session.last_snapshot_at) : "No snapshots yet";
-      const isActive = this.currentSessionId === session.session_id ? " [ACTIVE]" : "";
-      parts.push(`## ${projectDisplay}${isActive}`);
-      parts.push(`Session: \`${session.session_id}\``);
-      parts.push(`Snapshots: ${session.snapshot_count} (~${session.total_tokens} tokens)`);
-      parts.push(`Last activity: ${lastActivity}`);
-      parts.push(`Started: ${session.started_at}`);
-      parts.push("");
+    if (subAction === "resume") {
+      if (args.session_id) {
+        this.currentSessionId = args.session_id;
+        const stats = this.db.getSessionStats(args.session_id);
+        return {
+          content: [{
+            type: "text",
+            text: `Resumed session: ${args.session_id}
+Snapshots: ${stats?.snapshot_count || 0}`
+          }]
+        };
+      }
+      if (args.project_path) {
+        const existingId = this.db.findSessionByProject(args.project_path);
+        if (existingId) {
+          this.currentSessionId = existingId;
+          const stats = this.db.getSessionStats(existingId);
+          return {
+            content: [{
+              type: "text",
+              text: `Resumed session for ${args.project_path}
+Session: ${existingId}
+Snapshots: ${stats?.snapshot_count || 0}`
+            }]
+          };
+        }
+        this.currentSessionId = this.db.getOrCreateSession(undefined, args.project_path);
+        return {
+          content: [{
+            type: "text",
+            text: `No existing session. Created: ${this.currentSessionId}`
+          }]
+        };
+      }
+      return { content: [{ type: "text", text: "Provide session_id or project_path to resume." }] };
     }
+    const sessions = this.db.listSessions(args.limit || 20);
+    if (sessions.length === 0) {
+      return { content: [{ type: "text", text: "No sessions found. Save a snapshot to create one." }] };
+    }
+    const lines = sessions.map((s) => {
+      const project = s.project_path?.replace(/^\/home\/[^/]+\//, "~/") || "No path";
+      const active = this.currentSessionId === s.session_id ? " [ACTIVE]" : "";
+      return `${project}${active}
+  ID: ${s.session_id}
+  Snapshots: ${s.snapshot_count} (~${s.total_tokens} tokens)`;
+    });
     return {
       content: [{
         type: "text",
-        text: parts.join(`
-`)
+        text: `# Sessions
+
+${lines.join(`
+
+`)}`
+      }]
+    };
+  }
+  async actionHealth() {
+    const health = this.db.healthCheck();
+    const status = health.ok ? "Healthy" : "Issues detected";
+    const details = Object.entries(health.details).map(([k, v]) => `  ${k}: ${v}`).join(`
+`);
+    return {
+      content: [{
+        type: "text",
+        text: `Momentum Health: ${status}
+
+${details}`
+      }]
+    };
+  }
+  async actionHelp() {
+    return {
+      content: [{
+        type: "text",
+        text: `# Momentum - Fast Context Recovery
+
+## Tools
+
+**save** - Save work progress snapshot
+  Required: summary, context
+  Optional: files_touched, decisions, next_steps, importance
+
+**restore** - Restore context after /clear
+  Optional: importance_level (critical/important/all), max_snapshots, project_path
+
+**momentum** - Meta tool for management
+  action: list | search | sessions | health | help
+
+  list: Show snapshots (limit, session_id)
+  search: Find snapshots (query, detailed, limit)
+  sessions: Manage sessions (session_action: list/start/resume)
+  health: Database health check
+  help: This message
+
+## Workflow
+1. Save snapshots at task boundaries
+2. Run /clear when context full
+3. Call restore to recover context
+4. Continue work seamlessly`
       }]
     };
   }
   getImportanceIcon(importance) {
     switch (importance) {
       case "critical":
-        return "\uD83D\uDD34";
+        return "[!]";
       case "important":
-        return "\uD83D\uDFE1";
+        return "[*]";
       case "reference":
-        return "\uD83D\uDCCE";
+        return "[r]";
       default:
-        return "\u25CB";
+        return "[-]";
     }
   }
   getTimeAgo(timestamp) {
@@ -14843,8 +14487,8 @@ _Use this context to continue your work. Key decisions and progress have been re
   async run() {
     const transport = new StdioServerTransport;
     await this.server.connect(transport);
-    console.error("Momentum MCP Server running");
-    console.error(`Database: ${getDefaultDbPath()}`);
+    console.error(`[momentum v${VERSION}] Server running`);
+    console.error(`[momentum v${VERSION}] Database: ${getDefaultDbPath()}`);
   }
 }
 var server = new MomentumServer;

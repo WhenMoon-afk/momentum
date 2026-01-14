@@ -1,6 +1,6 @@
 {
   "name": "momentum",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Instant context recovery for Claude Code. Save snapshots as you work, restore in <5ms after /clear. Powered by Bun's native SQLite.",
   "author": {
     "name": "whenmoon-afk"
@@ -9,6 +9,7 @@
   "repository": "https://github.com/whenmoon-afk/momentum",
   "license": "MIT",
   "keywords": ["context", "recovery", "snapshots", "memory", "compaction", "momentum", "bun", "sqlite"],
+  "commands": ["./commands"],
   "skills": ["./skills/context-management"],
   "agents": ["./agents/restore-context.md"],
   "mcpServers": {

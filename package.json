@@ -1,6 +1,6 @@
 {
   "name": "momentum",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Fast context recovery for Claude Code - never lose your momentum",
   "type": "module",
   "main": "dist/index.js",
@@ -66,6 +66,7 @@
     "skills",
     "hooks",
     "agents",
+    "commands",
     "scripts",
     "README.md",
     "CHANGELOG.md",

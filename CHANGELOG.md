@@ -2,6 +2,30 @@
 
 All notable changes to Momentum will be documented in this file.
 
+## [0.5.0] - 2026-01-14
+
+### Changed
+- **BREAKING: 3-Tool Consolidation** - Reduced from 13 tools to 3 following obra's Streamlinear pattern
+  - `save` - Save work progress snapshot
+  - `restore` - Restore context after /clear (auto-starts session)
+  - `momentum` - Meta tool for list, search, sessions, health, help
+- **~77% token reduction** - Tool definitions now ~900 tokens (down from ~5,200)
+
+### Added
+- `/save` command for manual snapshot triggers
+- `scripts/release.sh` for automated releases
+- Self-documenting `momentum` meta tool with help action
+
+### Fixed
+- Version sync between package.json and plugin.json
+
+## [0.4.1] - 2026-01-11
+
+### Fixed
+- Plugin.json removed CLAUDE_DATA_DIR dependency
+- Fixed duplicate hooks in plugin configuration
+- Default database paths now work correctly
+
 ## [0.3.0] - 2026-01-11
 
 ### Added
