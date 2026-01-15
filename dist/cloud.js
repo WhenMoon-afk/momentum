@@ -2,8 +2,8 @@
  * Momentum Cloud Sync
  * Syncs local snapshots to Substratia Cloud via Convex HTTP API
  */
-// Default cloud API endpoint
-const DEFAULT_API_URL = 'https://aware-pony-419.convex.site';
+// Default cloud API endpoint (Convex HTTP actions)
+const DEFAULT_API_URL = 'https://agreeable-chameleon-83.convex.site';
 /**
  * Get cloud configuration from environment
  */
