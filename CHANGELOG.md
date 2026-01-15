@@ -2,6 +2,26 @@
 
 All notable changes to Momentum will be documented in this file.
 
+## [0.7.0] - 2026-01-15
+
+### Added
+- **Substratia Cloud Sync** - Snapshots automatically sync to cloud when API key configured
+  - Auto-sync on save (non-blocking)
+  - Manual bulk sync via `momentum` tool with `action: sync`
+  - Offline-first: saves locally, syncs when connected
+- **Cloud health monitoring** - `action: health` now shows cloud connection status
+- **Unsynced tracking** - Database tracks which snapshots need cloud sync
+
+### Configuration
+To enable cloud sync:
+1. Get API key from https://substratia.io/dashboard
+2. Set environment variable: `export SUBSTRATIA_API_KEY=sk_your_key`
+
+### Technical
+- New `cloud.ts` module for Convex HTTP API integration
+- Database migration adds `synced` and `cloud_id` columns
+- API endpoints: `/api/snapshots/sync`, `/api/snapshots/bulk-sync`
+
 ## [0.6.0] - 2026-01-14
 
 ### Changed

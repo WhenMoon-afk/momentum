@@ -13,7 +13,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ErrorCode, McpError, } f
 import { homedir } from 'os';
 import { join } from 'path';
 import { MomentumDatabase } from './database.js';
-const VERSION = '0.6.0';
+import { isCloudEnabled, syncSnapshot, bulkSyncSnapshots, checkCloudHealth, getCloudConfig } from './cloud.js';
+const VERSION = '0.7.0';
 // Determine database path
 function getDefaultDbPath() {
     const base = process.env.MOMENTUM_DB_PATH;
@@ -81,14 +82,14 @@ class MomentumServer {
                 },
                 {
                     name: 'momentum',
-                    description: 'Meta tool: list snapshots, search, manage sessions, health check, help',
+                    description: 'Meta tool: list snapshots, search, manage sessions, cloud sync, health check, help',
                     inputSchema: {
                         type: 'object',
                         properties: {
                             action: {
                                 type: 'string',
-                                enum: ['list', 'search', 'sessions', 'health', 'help'],
-                                description: 'list=snapshots, search=by query, sessions=list/start/resume, health=db check, help=usage',
+                                enum: ['list', 'search', 'sessions', 'sync', 'health', 'help'],
+                                description: 'list=snapshots, search=by query, sessions=list/start/resume, sync=cloud sync, health=db check, help=usage',
                             },
                             query: { type: 'string', description: 'For search action: search query' },
                             session_id: { type: 'string', description: 'Target session ID' },
@@ -144,10 +145,30 @@ class MomentumServer {
         };
         const snapshot = this.db.saveSnapshot(input);
         this.currentSessionId = snapshot.session_id;
+        // Get project path for cloud sync
+        const sessions = this.db.listSessions(1);
+        const projectPath = sessions.find(s => s.session_id === snapshot.session_id)?.project_path || process.cwd();
+        // Try to sync to cloud if enabled (non-blocking)
+        let cloudStatus = '';
+        if (isCloudEnabled()) {
+            try {
+                const result = await syncSnapshot(snapshot, projectPath);
+                if (result.success) {
+                    this.db.markSynced(snapshot.id, result.snapshotId);
+                    cloudStatus = '\nCloud: synced';
+                }
+                else {
+                    cloudStatus = `\nCloud: pending (${result.error})`;
+                }
+            }
+            catch {
+                cloudStatus = '\nCloud: pending (sync error)';
+            }
+        }
         return {
             content: [{
                     type: 'text',
-                    text: `Snapshot #${snapshot.id} saved (${snapshot.token_estimate} tokens)\nSession: ${snapshot.session_id}`,
+                    text: `Snapshot #${snapshot.id} saved (${snapshot.token_estimate} tokens)\nSession: ${snapshot.session_id}${cloudStatus}`,
                 }],
         };
     }
@@ -242,12 +263,14 @@ class MomentumServer {
                 return this.actionSearch(args);
             case 'sessions':
                 return this.actionSessions(args);
+            case 'sync':
+                return this.actionSync(args);
             case 'health':
                 return this.actionHealth();
             case 'help':
                 return this.actionHelp();
             default:
-                throw new Error(`Unknown action: ${args.action}. Use: list, search, sessions, health, help`);
+                throw new Error(`Unknown action: ${args.action}. Use: list, search, sessions, sync, health, help`);
         }
     }
     async actionList(args) {
@@ -380,20 +403,86 @@ class MomentumServer {
                 }],
         };
     }
+    async actionSync(args) {
+        const config = getCloudConfig();
+        if (!config.enabled) {
+            return {
+                content: [{
+                        type: 'text',
+                        text: `Cloud sync not configured.\n\nTo enable:\n1. Get API key from https://substratia.io/dashboard\n2. Set SUBSTRATIA_API_KEY environment variable\n\nExample:\nexport SUBSTRATIA_API_KEY=sk_your_key_here`,
+                    }],
+            };
+        }
+        // Check cloud health first
+        const healthResult = await checkCloudHealth(config);
+        if (!healthResult.ok) {
+            return {
+                content: [{
+                        type: 'text',
+                        text: `Cloud service unavailable: ${healthResult.error}\n\nSnapshots saved locally, will sync when service is available.`,
+                    }],
+            };
+        }
+        // Get unsynced snapshots
+        const unsynced = this.db.getUnsyncedSnapshots(args.limit || 100);
+        const unsyncedCount = this.db.getUnsyncedCount();
+        if (unsynced.length === 0) {
+            return {
+                content: [{
+                        type: 'text',
+                        text: `All snapshots synced to cloud.\n\nTotal unsynced: 0`,
+                    }],
+            };
+        }
+        // Bulk sync
+        const result = await bulkSyncSnapshots(unsynced.map(u => ({ snapshot: u.snapshot, projectPath: u.projectPath || 'unknown' })), config);
+        if (result.success) {
+            // Mark synced snapshots
+            const syncedIds = unsynced.slice(0, result.synced).map(u => u.snapshot.id);
+            this.db.markMultipleSynced(syncedIds);
+            const remaining = unsyncedCount - result.synced;
+            return {
+                content: [{
+                        type: 'text',
+                        text: `Cloud sync complete!\n\nSynced: ${result.synced}/${result.total}\nRemaining: ${remaining}${remaining > 0 ? '\n\nRun sync again to continue.' : ''}`,
+                    }],
+            };
+        }
+        return {
+            content: [{
+                    type: 'text',
+                    text: `Cloud sync failed: ${result.error}\n\nSynced: ${result.synced}/${result.total}\nSnapshots saved locally, retry sync later.`,
+                }],
+        };
+    }
     async actionHealth() {
         const health = this.db.healthCheck();
         const status = health.ok ? 'Healthy' : 'Issues detected';
         const details = Object.entries(health.details)
             .map(([k, v]) => `  ${k}: ${v}`)
             .join('\n');
+        // Add cloud status
+        const config = getCloudConfig();
+        let cloudInfo = '\n\nCloud: ';
+        if (config.enabled) {
+            const cloudHealth = await checkCloudHealth(config);
+            cloudInfo += cloudHealth.ok ? 'Connected' : `Unavailable (${cloudHealth.error})`;
+            const unsyncedCount = this.db.getUnsyncedCount();
+            cloudInfo += `\nUnsynced snapshots: ${unsyncedCount}`;
+        }
+        else {
+            cloudInfo += 'Not configured (set SUBSTRATIA_API_KEY)';
+        }
         return {
             content: [{
                     type: 'text',
-                    text: `Momentum Health: ${status}\n\n${details}`,
+                    text: `Momentum Health: ${status}\n\n${details}${cloudInfo}`,
                 }],
         };
     }
     async actionHelp() {
+        const cloudEnabled = isCloudEnabled();
+        const cloudStatus = cloudEnabled ? 'Enabled' : 'Not configured';
         return {
             content: [{
                     type: 'text',
@@ -404,19 +493,28 @@ class MomentumServer {
 **save** - Save work progress snapshot
   Required: summary, context
   Optional: files_touched, decisions, next_steps, importance
+  ${cloudEnabled ? 'Auto-syncs to Substratia Cloud' : ''}
 
 **restore** - Restore context after /clear
   Optional: importance_level (critical/important/all), max_snapshots, project_path
 
 **momentum** - Meta tool for management
-  action: list | search | sessions | health | help
+  action: list | search | sessions | sync | health | help
 
   list: Show snapshots (limit, session_id)
   search: Find snapshots (query, detailed, limit)
   sessions: Manage sessions (session_action: list/start/resume)
-  health: Database health check
+  sync: Sync unsynced snapshots to cloud (limit)
+  health: Database + cloud health check
   help: This message
 
+## Cloud Sync
+Status: ${cloudStatus}
+${!cloudEnabled ? `
+To enable:
+1. Get API key from https://substratia.io/dashboard
+2. Set SUBSTRATIA_API_KEY environment variable
+` : ''}
 ## Workflow
 1. Save snapshots at task boundaries
 2. Run /clear when context full

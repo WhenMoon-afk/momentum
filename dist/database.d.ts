@@ -118,6 +118,25 @@ export declare class MomentumDatabase {
         snapshot_count: number;
         total_tokens: number;
     }>;
+    /**
+     * Get unsynced snapshots for cloud sync
+     */
+    getUnsyncedSnapshots(limit?: number): Array<{
+        snapshot: Snapshot;
+        projectPath: string | null;
+    }>;
+    /**
+     * Mark a snapshot as synced to cloud
+     */
+    markSynced(snapshotId: number, cloudId?: string): void;
+    /**
+     * Mark multiple snapshots as synced
+     */
+    markMultipleSynced(snapshotIds: number[]): void;
+    /**
+     * Get count of unsynced snapshots
+     */
+    getUnsyncedCount(): number;
     close(): void;
 }
 //# sourceMappingURL=database.d.ts.map

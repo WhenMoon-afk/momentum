@@ -91,6 +91,19 @@ export class MomentumDatabase {
             }
             this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(2);
         }
+        // Migration 3: Add cloud sync tracking columns
+        if (currentVersion.ver < 3) {
+            try {
+                this.db.exec(`
+          ALTER TABLE snapshots ADD COLUMN synced INTEGER DEFAULT 0;
+          ALTER TABLE snapshots ADD COLUMN cloud_id TEXT;
+        `);
+            }
+            catch {
+                // Columns might already exist, ignore
+            }
+            this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(3);
+        }
     }
     /**
      * Get or create a session ID based on current context
@@ -572,6 +585,58 @@ export class MomentumDatabase {
       ORDER BY s.last_snapshot_at DESC NULLS LAST, s.started_at DESC
       LIMIT ?
     `).all(safeLimit);
+    }
+    /**
+     * Get unsynced snapshots for cloud sync
+     */
+    getUnsyncedSnapshots(limit = 100) {
+        const safeLimit = Math.min(Math.max(1, limit), 500);
+        const results = this.db.prepare(`
+      SELECT s.*, sess.project_path
+      FROM snapshots s
+      LEFT JOIN sessions sess ON s.session_id = sess.session_id
+      WHERE s.synced = 0 OR s.synced IS NULL
+      ORDER BY s.created_at ASC
+      LIMIT ?
+    `).all(safeLimit);
+        return results.map(row => ({
+            snapshot: {
+                id: row.id,
+                session_id: row.session_id,
+                sequence: row.sequence,
+                summary: row.summary,
+                context: row.context,
+                files_touched: row.files_touched,
+                decisions: row.decisions,
+                next_steps: row.next_steps,
+                token_estimate: row.token_estimate,
+                importance: row.importance,
+                created_at: row.created_at,
+            },
+            projectPath: row.project_path || 'unknown',
+        }));
+    }
+    /**
+     * Mark a snapshot as synced to cloud
+     */
+    markSynced(snapshotId, cloudId) {
+        this.db.prepare('UPDATE snapshots SET synced = 1, cloud_id = ? WHERE id = ?').run(cloudId || null, snapshotId);
+    }
+    /**
+     * Mark multiple snapshots as synced
+     */
+    markMultipleSynced(snapshotIds) {
+        if (snapshotIds.length === 0)
+            return;
+        const placeholders = snapshotIds.map(() => '?').join(',');
+        this.db.prepare(`UPDATE snapshots SET synced = 1 WHERE id IN (${placeholders})`).run(...snapshotIds);
+    }
+    /**
+     * Get count of unsynced snapshots
+     */
+    getUnsyncedCount() {
+        const result = this.db.prepare('SELECT COUNT(*) as count FROM snapshots WHERE synced = 0 OR synced IS NULL').get();
+        return result.count;
     }
     close() {
         this.db.close();

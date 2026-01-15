@@ -161,15 +161,29 @@ SQLite database at `~/.local/share/momentum/momentum.db`
 
 Override with `MOMENTUM_DB_PATH` environment variable.
 
-## Want Cloud Sync?
+## Cloud Sync
 
-**[Substratia Pro](https://substratia.io)** (coming soon) adds:
-- Cloud sync for snapshots across all your devices
-- Snapshot dashboard to browse and manage context
-- Automatic backups and disaster recovery
-- Team snapshot sharing
+Momentum v0.7.0+ supports syncing snapshots to **[Substratia Cloud](https://substratia.io/cloud)**:
 
-**[Join the waitlist](https://substratia.io)** to get early access.
+1. **Get API key** from [substratia.io/dashboard](https://substratia.io/dashboard)
+2. **Set environment variable:**
+   ```bash
+   export SUBSTRATIA_API_KEY=sk_your_key_here
+   ```
+3. **Snapshots auto-sync** on save
+
+### Manual Sync
+
+```
+momentum(action: "sync")      # Sync all unsynced snapshots
+momentum(action: "health")    # Check cloud connection status
+```
+
+### Benefits
+- Access snapshots across all devices
+- Browse snapshots in the web dashboard
+- Automatic backups
+- Team sharing (coming soon)
 
 ## Related Projects
 
