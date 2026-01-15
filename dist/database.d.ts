@@ -137,6 +137,27 @@ export declare class MomentumDatabase {
      * Get count of unsynced snapshots
      */
     getUnsyncedCount(): number;
+    /**
+     * Mark a snapshot sync as failed with retry tracking
+     */
+    markSyncFailed(snapshotId: number, error: string): void;
+    /**
+     * Get snapshots ready for retry (exponential backoff)
+     * Backoff: 1min, 2min, 4min, 8min, 16min, then give up (5 retries max)
+     */
+    getRetryableSnapshots(limit?: number): Array<{
+        snapshot: Snapshot;
+        projectPath: string | null;
+        retries: number;
+    }>;
+    /**
+     * Get count of failed syncs (exceeded max retries)
+     */
+    getFailedSyncCount(): number;
+    /**
+     * Reset sync status for failed snapshots (allow manual retry)
+     */
+    resetFailedSyncs(): number;
     close(): void;
 }
 //# sourceMappingURL=database.d.ts.map

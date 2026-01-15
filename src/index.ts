@@ -180,10 +180,13 @@ class MomentumServer {
           this.db.markSynced(snapshot.id, result.snapshotId);
           cloudStatus = '\nCloud: synced';
         } else {
+          this.db.markSyncFailed(snapshot.id, result.error || 'Unknown error');
           cloudStatus = `\nCloud: pending (${result.error})`;
         }
-      } catch {
-        cloudStatus = '\nCloud: pending (sync error)';
+      } catch (e) {
+        const error = e instanceof Error ? e.message : 'sync error';
+        this.db.markSyncFailed(snapshot.id, error);
+        cloudStatus = '\nCloud: pending (will retry)';
       }
     }
 
@@ -485,43 +488,77 @@ class MomentumServer {
       };
     }
 
-    // Get unsynced snapshots
+    // Get unsynced snapshots (new ones first)
     const unsynced = this.db.getUnsyncedSnapshots(args.limit || 100);
     const unsyncedCount = this.db.getUnsyncedCount();
 
-    if (unsynced.length === 0) {
+    // Also get retryable snapshots (failed but backoff expired)
+    const retryable = this.db.getRetryableSnapshots(20);
+    const failedCount = this.db.getFailedSyncCount();
+
+    if (unsynced.length === 0 && retryable.length === 0) {
+      let statusText = 'All snapshots synced to cloud.';
+      if (failedCount > 0) {
+        statusText += `\n\nFailed (max retries): ${failedCount}\nUse 'momentum action:sync-reset' to retry failed syncs.`;
+      }
       return {
         content: [{
           type: 'text',
-          text: `All snapshots synced to cloud.\n\nTotal unsynced: 0`,
+          text: statusText,
         }],
       };
     }
 
+    // Combine new unsynced and retryable snapshots
+    const toSync = [
+      ...unsynced.map(u => ({ snapshot: u.snapshot, projectPath: u.projectPath || 'unknown', isRetry: false })),
+      ...retryable.map(r => ({ snapshot: r.snapshot, projectPath: r.projectPath || 'unknown', isRetry: true })),
+    ].slice(0, 100); // Limit total
+
     // Bulk sync
     const result = await bulkSyncSnapshots(
-      unsynced.map(u => ({ snapshot: u.snapshot, projectPath: u.projectPath || 'unknown' })),
+      toSync.map(u => ({ snapshot: u.snapshot, projectPath: u.projectPath })),
       config
     );
 
     if (result.success) {
       // Mark synced snapshots
-      const syncedIds = unsynced.slice(0, result.synced).map(u => u.snapshot.id);
+      const syncedItems = toSync.slice(0, result.synced);
+      const syncedIds = syncedItems.map(u => u.snapshot.id);
       this.db.markMultipleSynced(syncedIds);
 
-      const remaining = unsyncedCount - result.synced;
+      const remaining = unsyncedCount - syncedItems.filter(s => !s.isRetry).length;
+      const retriedCount = syncedItems.filter(s => s.isRetry).length;
+
+      let statusText = `Cloud sync complete!\n\nSynced: ${result.synced}/${result.total}`;
+      if (retriedCount > 0) {
+        statusText += ` (${retriedCount} retries)`;
+      }
+      statusText += `\nRemaining: ${remaining}`;
+      if (remaining > 0) {
+        statusText += '\n\nRun sync again to continue.';
+      }
+      if (failedCount > 0) {
+        statusText += `\nFailed (max retries): ${failedCount}`;
+      }
+
       return {
         content: [{
           type: 'text',
-          text: `Cloud sync complete!\n\nSynced: ${result.synced}/${result.total}\nRemaining: ${remaining}${remaining > 0 ? '\n\nRun sync again to continue.' : ''}`,
+          text: statusText,
         }],
       };
+    }
+
+    // Mark failed items
+    for (const item of toSync) {
+      this.db.markSyncFailed(item.snapshot.id, result.error || 'Bulk sync failed');
     }
 
     return {
       content: [{
         type: 'text',
-        text: `Cloud sync failed: ${result.error}\n\nSynced: ${result.synced}/${result.total}\nSnapshots saved locally, retry sync later.`,
+        text: `Cloud sync failed: ${result.error}\n\nSynced: ${result.synced}/${result.total}\nSnapshots saved locally, will retry with exponential backoff.`,
       }],
     };
   }
@@ -608,7 +645,15 @@ class MomentumServer {
       const cloudHealth = await checkCloudHealth(config);
       cloudInfo += cloudHealth.ok ? 'Connected' : `Unavailable (${cloudHealth.error})`;
       const unsyncedCount = this.db.getUnsyncedCount();
-      cloudInfo += `\nUnsynced snapshots: ${unsyncedCount}`;
+      const failedCount = this.db.getFailedSyncCount();
+      const retryableCount = this.db.getRetryableSnapshots(100).length;
+      cloudInfo += `\nUnsynced: ${unsyncedCount}`;
+      if (retryableCount > 0) {
+        cloudInfo += ` (${retryableCount} ready to retry)`;
+      }
+      if (failedCount > 0) {
+        cloudInfo += `\nFailed (max retries): ${failedCount}`;
+      }
     } else {
       cloudInfo += 'Not configured (set SUBSTRATIA_API_KEY)';
     }

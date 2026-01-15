@@ -122,6 +122,20 @@ export class MomentumDatabase {
       }
       this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(3);
     }
+
+    // Migration 4: Add sync retry tracking columns
+    if (currentVersion.ver < 4) {
+      try {
+        this.db.exec(`
+          ALTER TABLE snapshots ADD COLUMN sync_retries INTEGER DEFAULT 0;
+          ALTER TABLE snapshots ADD COLUMN sync_failed_at TEXT;
+          ALTER TABLE snapshots ADD COLUMN sync_error TEXT;
+        `);
+      } catch {
+        // Columns might already exist, ignore
+      }
+      this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(4);
+    }
   }
 
   /**
@@ -782,6 +796,86 @@ export class MomentumDatabase {
       'SELECT COUNT(*) as count FROM snapshots WHERE synced = 0 OR synced IS NULL'
     ).get() as { count: number };
     return result.count;
+  }
+
+  /**
+   * Mark a snapshot sync as failed with retry tracking
+   */
+  markSyncFailed(snapshotId: number, error: string): void {
+    this.db.prepare(`
+      UPDATE snapshots
+      SET sync_retries = COALESCE(sync_retries, 0) + 1,
+          sync_failed_at = datetime('now'),
+          sync_error = ?
+      WHERE id = ?
+    `).run(error, snapshotId);
+  }
+
+  /**
+   * Get snapshots ready for retry (exponential backoff)
+   * Backoff: 1min, 2min, 4min, 8min, 16min, then give up (5 retries max)
+   */
+  getRetryableSnapshots(limit: number = 10): Array<{ snapshot: Snapshot; projectPath: string | null; retries: number }> {
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+    const maxRetries = 5;
+
+    // Calculate backoff thresholds for each retry level
+    // Retry 1: 1 minute ago, Retry 2: 2 minutes ago, etc.
+    const results = this.db.prepare(`
+      SELECT s.*, sess.project_path, COALESCE(s.sync_retries, 0) as retries
+      FROM snapshots s
+      LEFT JOIN sessions sess ON s.session_id = sess.session_id
+      WHERE (s.synced = 0 OR s.synced IS NULL)
+        AND s.sync_failed_at IS NOT NULL
+        AND COALESCE(s.sync_retries, 0) < ?
+        AND datetime(s.sync_failed_at, '+' || (1 << COALESCE(s.sync_retries, 0)) || ' minutes') < datetime('now')
+      ORDER BY s.sync_retries ASC, s.created_at ASC
+      LIMIT ?
+    `).all(maxRetries, safeLimit) as Array<Snapshot & { project_path: string | null; retries: number }>;
+
+    return results.map(row => ({
+      snapshot: {
+        id: row.id,
+        session_id: row.session_id,
+        sequence: row.sequence,
+        summary: row.summary,
+        context: row.context,
+        files_touched: row.files_touched,
+        decisions: row.decisions,
+        next_steps: row.next_steps,
+        token_estimate: row.token_estimate,
+        importance: row.importance,
+        created_at: row.created_at,
+      } as Snapshot,
+      projectPath: row.project_path || 'unknown',
+      retries: row.retries,
+    }));
+  }
+
+  /**
+   * Get count of failed syncs (exceeded max retries)
+   */
+  getFailedSyncCount(): number {
+    const maxRetries = 5;
+    const result = this.db.prepare(`
+      SELECT COUNT(*) as count FROM snapshots
+      WHERE (synced = 0 OR synced IS NULL)
+        AND sync_retries >= ?
+    `).get(maxRetries) as { count: number };
+    return result.count;
+  }
+
+  /**
+   * Reset sync status for failed snapshots (allow manual retry)
+   */
+  resetFailedSyncs(): number {
+    const result = this.db.prepare(`
+      UPDATE snapshots
+      SET sync_retries = 0, sync_failed_at = NULL, sync_error = NULL
+      WHERE (synced = 0 OR synced IS NULL)
+        AND sync_retries >= 5
+    `).run();
+    return result.changes;
   }
 
   close(): void {
