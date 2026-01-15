@@ -3,10 +3,17 @@
  * Syncs local snapshots to Substratia Cloud via Convex HTTP API
  */
 
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { homedir } from 'os';
+import { join, dirname } from 'path';
 import { Snapshot } from './types.js';
 
 // Default cloud API endpoint (Convex HTTP actions)
 const DEFAULT_API_URL = 'https://agreeable-chameleon-83.convex.site';
+
+// Config file path: ~/.config/substratia/credentials.json
+const CONFIG_DIR = join(homedir(), '.config', 'substratia');
+const CONFIG_FILE = join(CONFIG_DIR, 'credentials.json');
 
 interface SyncResult {
   success: boolean;
@@ -21,18 +28,75 @@ interface BulkSyncResult {
   error?: string;
 }
 
-interface CloudConfig {
+export interface CloudConfig {
   apiKey: string | null;
   apiUrl: string;
   enabled: boolean;
 }
 
+interface StoredConfig {
+  apiKey?: string;
+  apiUrl?: string;
+}
+
 /**
- * Get cloud configuration from environment
+ * Read config from file
+ */
+function readConfigFile(): StoredConfig | null {
+  try {
+    if (!existsSync(CONFIG_FILE)) {
+      return null;
+    }
+    const content = readFileSync(CONFIG_FILE, 'utf-8');
+    return JSON.parse(content) as StoredConfig;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save API key to config file
+ */
+export function saveApiKey(apiKey: string): { success: boolean; error?: string } {
+  try {
+    // Create config directory if it doesn't exist
+    if (!existsSync(CONFIG_DIR)) {
+      mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+
+    // Read existing config or create new one
+    const existing = readConfigFile() || {};
+    const newConfig: StoredConfig = {
+      ...existing,
+      apiKey,
+    };
+
+    writeFileSync(CONFIG_FILE, JSON.stringify(newConfig, null, 2), 'utf-8');
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save config',
+    };
+  }
+}
+
+/**
+ * Get config file path (for display to user)
+ */
+export function getConfigPath(): string {
+  return CONFIG_FILE;
+}
+
+/**
+ * Get cloud configuration from config file or environment
+ * Priority: config file > environment variable
  */
 export function getCloudConfig(): CloudConfig {
-  const apiKey = process.env.SUBSTRATIA_API_KEY || null;
-  const apiUrl = process.env.SUBSTRATIA_API_URL || DEFAULT_API_URL;
+  // Try config file first
+  const fileConfig = readConfigFile();
+  const apiKey = fileConfig?.apiKey || process.env.SUBSTRATIA_API_KEY || null;
+  const apiUrl = fileConfig?.apiUrl || process.env.SUBSTRATIA_API_URL || DEFAULT_API_URL;
 
   return {
     apiKey,
@@ -45,7 +109,8 @@ export function getCloudConfig(): CloudConfig {
  * Check if cloud sync is enabled
  */
 export function isCloudEnabled(): boolean {
-  return !!process.env.SUBSTRATIA_API_KEY;
+  const config = getCloudConfig();
+  return config.enabled;
 }
 
 /**

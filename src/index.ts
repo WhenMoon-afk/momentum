@@ -20,7 +20,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { MomentumDatabase } from './database.js';
 import { SaveSnapshotInput } from './types.js';
-import { isCloudEnabled, syncSnapshot, bulkSyncSnapshots, checkCloudHealth, getCloudConfig } from './cloud.js';
+import { isCloudEnabled, syncSnapshot, bulkSyncSnapshots, checkCloudHealth, getCloudConfig, saveApiKey, getConfigPath } from './cloud.js';
 
 const VERSION = '0.7.0';
 
@@ -105,8 +105,8 @@ class MomentumServer {
             properties: {
               action: {
                 type: 'string',
-                enum: ['list', 'search', 'sessions', 'sync', 'health', 'help'],
-                description: 'list=snapshots, search=by query, sessions=list/start/resume, sync=cloud sync, health=db check, help=usage',
+                enum: ['list', 'search', 'sessions', 'sync', 'connect', 'health', 'help'],
+                description: 'list=snapshots, search=by query, sessions=list/start/resume, sync=cloud sync, connect=setup API key, health=db check, help=usage',
               },
               query: { type: 'string', description: 'For search action: search query' },
               session_id: { type: 'string', description: 'Target session ID' },
@@ -114,6 +114,7 @@ class MomentumServer {
               limit: { type: 'number', description: 'For list/sessions: max results' },
               detailed: { type: 'boolean', description: 'For search: include full content' },
               session_action: { type: 'string', enum: ['list', 'start', 'resume'], description: 'For sessions: sub-action' },
+              api_key: { type: 'string', description: 'For connect action: Substratia API key' },
             },
             required: ['action'],
           },
@@ -298,12 +299,14 @@ class MomentumServer {
         return this.actionSessions(args);
       case 'sync':
         return this.actionSync(args);
+      case 'connect':
+        return this.actionConnect(args);
       case 'health':
         return this.actionHealth();
       case 'help':
         return this.actionHelp();
       default:
-        throw new Error(`Unknown action: ${args.action}. Use: list, search, sessions, sync, health, help`);
+        throw new Error(`Unknown action: ${args.action}. Use: list, search, sessions, sync, connect, health, help`);
     }
   }
 
@@ -523,6 +526,74 @@ class MomentumServer {
     };
   }
 
+  private async actionConnect(args: MomentumArgs) {
+    if (!args.api_key) {
+      // Show current status and instructions
+      const config = getCloudConfig();
+      const configPath = getConfigPath();
+
+      if (config.enabled) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Cloud sync already configured.\n\nConfig file: ${configPath}\nAPI URL: ${config.apiUrl}\n\nTo reconfigure, provide a new api_key.`,
+          }],
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Connect to Substratia Cloud\n\n1. Go to https://substratia.io/dashboard\n2. Click "Connect Claude Code"\n3. Run the command that's copied to your clipboard\n\nOr provide api_key parameter directly.`,
+        }],
+      };
+    }
+
+    // Validate API key format (sk_ prefix)
+    const key = args.api_key.trim();
+    if (!key.startsWith('sk_')) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Invalid API key format. Keys should start with "sk_".\n\nGet your key from: https://substratia.io/dashboard`,
+        }],
+      };
+    }
+
+    // Save the API key to config file
+    const result = saveApiKey(key);
+    if (!result.success) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to save API key: ${result.error}\n\nYou can set SUBSTRATIA_API_KEY environment variable instead.`,
+        }],
+      };
+    }
+
+    const configPath = getConfigPath();
+
+    // Verify connection by checking cloud health
+    const config = getCloudConfig();
+    const healthResult = await checkCloudHealth(config);
+
+    if (!healthResult.ok) {
+      return {
+        content: [{
+          type: 'text',
+          text: `API key saved to: ${configPath}\n\nWarning: Could not verify connection (${healthResult.error})\nKey will be used when service is available.`,
+        }],
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Connected to Substratia Cloud!\n\nConfig saved to: ${configPath}\n\nYour snapshots will now sync automatically. Use 'momentum action:sync' to sync existing snapshots.`,
+      }],
+    };
+  }
+
   private async actionHealth() {
     const health = this.db.healthCheck();
     const status = health.ok ? 'Healthy' : 'Issues detected';
@@ -570,12 +641,13 @@ class MomentumServer {
   Optional: importance_level (critical/important/all), max_snapshots, project_path
 
 **momentum** - Meta tool for management
-  action: list | search | sessions | sync | health | help
+  action: list | search | sessions | sync | connect | health | help
 
   list: Show snapshots (limit, session_id)
   search: Find snapshots (query, detailed, limit)
   sessions: Manage sessions (session_action: list/start/resume)
   sync: Sync unsynced snapshots to cloud (limit)
+  connect: Setup API key for cloud sync (api_key)
   health: Database + cloud health check
   help: This message
 
@@ -583,8 +655,9 @@ class MomentumServer {
 Status: ${cloudStatus}
 ${!cloudEnabled ? `
 To enable:
-1. Get API key from https://substratia.io/dashboard
-2. Set SUBSTRATIA_API_KEY environment variable
+1. Go to https://substratia.io/dashboard
+2. Click "Connect Claude Code"
+3. Paste the command in Claude Code
 ` : ''}
 ## Workflow
 1. Save snapshots at task boundaries
@@ -646,13 +719,14 @@ interface RestoreArgs {
 }
 
 interface MomentumArgs {
-  action: 'list' | 'search' | 'sessions' | 'sync' | 'health' | 'help';
+  action: 'list' | 'search' | 'sessions' | 'sync' | 'connect' | 'health' | 'help';
   query?: string;
   session_id?: string;
   project_path?: string;
   limit?: number;
   detailed?: boolean;
   session_action?: 'list' | 'start' | 'resume';
+  api_key?: string;
 }
 
 const server = new MomentumServer();

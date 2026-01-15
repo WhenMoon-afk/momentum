@@ -14,13 +14,25 @@ interface BulkSyncResult {
     total: number;
     error?: string;
 }
-interface CloudConfig {
+export interface CloudConfig {
     apiKey: string | null;
     apiUrl: string;
     enabled: boolean;
 }
 /**
- * Get cloud configuration from environment
+ * Save API key to config file
+ */
+export declare function saveApiKey(apiKey: string): {
+    success: boolean;
+    error?: string;
+};
+/**
+ * Get config file path (for display to user)
+ */
+export declare function getConfigPath(): string;
+/**
+ * Get cloud configuration from config file or environment
+ * Priority: config file > environment variable
  */
 export declare function getCloudConfig(): CloudConfig;
 /**
