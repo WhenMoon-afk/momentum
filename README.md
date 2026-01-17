@@ -196,8 +196,6 @@ Part of the **Substratia** memory infrastructure ecosystem:
 ## Support
 
 - [GitHub Issues](https://github.com/WhenMoon-afk/momentum/issues) - Bug reports & feature requests
-- [GitHub Sponsors](https://github.com/sponsors/WhenMoon-afk) - Support development
-- [Ko-fi](https://ko-fi.com/substratia) - One-time contributions
 
 ## License
 
