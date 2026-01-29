@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Momentum context recovery ready. Use save_snapshot to save progress, restore_context after /clear.'"
+            "command": "echo 'Momentum ready. Tools: save_snapshot, load_snapshot, list_snapshots, delete_snapshot, import_snapshots'"
           }
         ]
       }

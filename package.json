@@ -1,7 +1,7 @@
 {
   "name": "momentum",
-  "version": "0.7.0",
-  "description": "Fast context recovery for Claude Code - never lose your momentum",
+  "version": "1.0.0",
+  "description": "Save and restore conversation snapshots for Claude Code",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -9,24 +9,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:types": "tsc --emitDeclarationOnly",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "test": "node --test tests/*.test.js",
     "prepublishOnly": "npm run build",
-    "setup": "npm install && npm run build",
-    "postinstall": "npm rebuild better-sqlite3 2>/dev/null || true",
-    "prepare": "husky"
+    "postinstall": "npm rebuild better-sqlite3 2>/dev/null || true"
   },
-  "keywords": [
-    "claude",
-    "claude-code",
-    "mcp",
-    "context",
-    "recovery",
-    "snapshots",
-    "substratia"
-  ],
   "author": "whenmoon-afk",
   "license": "MIT",
   "repository": {
@@ -34,20 +21,14 @@
     "url": "https://github.com/whenmoon-afk/momentum.git"
   },
   "homepage": "https://github.com/whenmoon-afk/momentum#readme",
-  "bugs": {
-    "url": "https://github.com/whenmoon-afk/momentum/issues"
-  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.3.1",
-    "@commitlint/config-conventional": "^20.3.1",
-    "@types/better-sqlite3": "^7.6.0",
-    "@types/node": "^22.9.0",
-    "husky": "^9.1.7",
-    "typescript": "^5.6.3"
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -56,10 +37,7 @@
     "dist",
     "cli",
     ".claude-plugin",
-    "skills",
     "hooks",
-    "commands",
-    "README.md",
-    "CHANGELOG.md"
+    "README.md"
   ]
 }

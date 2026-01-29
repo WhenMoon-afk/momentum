@@ -18,6 +18,10 @@ benchmark-results.json
 
 # OS files
 .DS_Store
+*:Zone.Identifier
+
+# Reference server (not part of distribution)
+snapshot-mcp-server/
 
 # Logs
 *.log
